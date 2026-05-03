@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>The Daily Edge — {{ edition_date }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+  <style>
+  :root {
+    --blue:   #185FA5; --coral:  #D85A30; --green:  #1D9E75;
+    --red:    #E24B4A; --amber:  #EF9F27; --purple: #534AB7;
+    --gray:   #888780;
+    --text:   #1a1a1a; --text2:  #5a5a5a; --muted:  #888780;
+    --border: #e8e6e0; --bg:     #ffffff; --bg2:    #f8f7f4;
+    --sans:   system-ui,-apple-system,"Segoe UI",Helvetica,sans-serif;
+    --mono:   "SF Mono","Roboto Mono",Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--sans);color:var(--text);background:var(--bg);font-size:13px;line-height:1.5}
+  a{color:inherit;text-decoration:none}
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .wrap{max-width:920px;margin:0 auto;padding:0 20px 80px}
+
+  /* ── Header ──────────────────────────────────────────────── */
+  .hdr{padding:36px 0 24px;border-bottom:2px solid var(--text);margin-bottom:28px}
+  .masthead{font-size:30px;font-weight:700;letter-spacing:-.5px;font-family:var(--sans)}
+  .hdr-date{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+  .hdr-tag{font-size:11px;color:var(--muted);margin-top:2px}
+
+  /* ── Lead stories ───────────────────────────────────────────── */
+  .leads{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:16px 20px;margin-bottom:32px}
+  .leads-hdr{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
+  .lead-row{display:flex;align-items:baseline;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
+  .lead-row:last-child{border-bottom:none}
+  .lead-txt{font-size:12px;line-height:1.5;flex:1}
+
+  /* ── Section nav ────────────────────────────────────────────── */
+  .sec-nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:36px;padding-bottom:16px;border-bottom:1px solid var(--border)}
+  .sec-nav a{font-size:11px;font-weight:500;padding:4px 10px;border-radius:3px;border:1px solid var(--border);color:var(--text2)}
+  .sec-nav a:hover{background:var(--bg2)}
+
+  /* ── Section header ──────────────────────────────────────────── */
+  .sec-hdr{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+           border-left:3px solid currentColor;padding-left:8px;margin:44px 0 16px}
+  .sec-hdr.rates     {color:#185FA5}
+  .sec-hdr.fx        {color:#0F6E56}
+  .sec-hdr.em        {color:#993C1D}
+  .sec-hdr.equities  {color:#3B6D11}
+  .sec-hdr.commodity {color:#854F0B}
+  .sec-hdr.credit    {color:#534AB7}
+  .sec-hdr.macro     {color:#5F5E5A}
+  .sec-hdr.vol       {color:#A32D2D}
+
+  /* ── Chart grid ───────────────────────────────────────────────── */
+  .grid{display:grid;gap:16px;grid-template-columns:repeat(2,1fr)}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+
+  /* ── Chart card ──────────────────────────────────────────────── */
+  .card{border:1px solid var(--border);border-radius:4px;padding:16px 20px;break-inside:avoid}
+  .card-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px}
+  .badges{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+  .sbadge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;letter-spacing:.04em;text-transform:uppercase}
+  .sbadge.rates    {background:#E6F1FB;color:#185FA5}
+  .sbadge.fx       {background:#E1F5EE;color:#0F6E56}
+  .sbadge.em       {background:#FAECE7;color:#993C1D}
+  .sbadge.equities {background:#EAF3DE;color:#3B6D11}
+  .sbadge.commodity{background:#FAEEDA;color:#854F0B}
+  .sbadge.credit   {background:#EEEDFE;color:#534AB7}
+  .sbadge.macro    {background:#F1EFE8;color:#5F5E5A}
+  .sbadge.vol      {background:#FCEBEB;color:#A32D2D}
+  .abadge{background:#E24B4A;color:#fff;font-size:10px;padding:2px 6px;border-radius:3px;font-weight:500}
+  .abadge.sub{background:#EF9F27}
+  .kpi{text-align:right}
+  .kpi-val{display:block;font-size:21px;font-weight:500;font-family:var(--mono);line-height:1.15}
+  .kpi-chg{font-size:12px;font-family:var(--mono)}
+  .kpi-chg.up{color:var(--green)}.kpi-chg.down{color:var(--red)}
+  .card-title{font-size:13px;font-weight:500;margin:2px 0}
+  .card-sub{font-size:11px;color:var(--muted);margin:0 0 10px;line-height:1.4}
+  .chart-wrap{position:relative;height:180px}
+  .chart-wrap canvas{max-height:180px}
+  .card-foot{display:flex;justify-content:space-between;margin-top:8px}
+  .src,.asof{font-size:10px;color:var(--muted)}
+  .score-bar{height:2px;border-radius:1px;background:var(--coral);margin-bottom:10px}
+
+  /* ── Footer ──────────────────────────────────────────────────── */
+  .ftr{margin-top:64px;padding-top:20px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);line-height:1.9}
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header class="hdr">
+    <div class="masthead">THE DAILY EDGE</div>
+    <div class="hdr-date">{{ weekday }}, {{ edition_date }} &middot; Issue #{{ issue_number }}</div>
+    <div class="hdr-tag">Institutional-grade market intelligence &middot; {{ total_charts }} charts &middot; {{ top_section }} leads today</div>
+  </header>
+
+  <!-- LEAD STORIES -->
+  {% if lead_stories %}
+  <section class="leads">
+    <div class="leads-hdr">What moved yesterday</div>
+    {% for s in lead_stories %}
+    <div class="lead-row">
+      <span class="sbadge {{ s.asset_class }}">{{ s.asset_class | upper }}</span>
+      <span class="lead-txt"><strong>{{ s.label }}</strong>: {{ s.subtitle }}</span>
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  <!-- NAV -->
+  <nav class="sec-nav">
+    {% for sec in sections_present %}
+    <a href="#sec-{{ sec }}">{{ section_labels[sec] }}</a>
+    {% endfor %}
+  </nav>
+
+  <!-- SECTIONS -->
+  {% for sec in sections_present %}
+  <section id="sec-{{ sec }}">
+    <h2 class="sec-hdr {{ sec }}">{{ section_labels[sec] }}</h2>
+    <div class="grid">
+    {% for chart in charts_by_section[sec] %}
+    <article class="card" data-section="{{ chart.asset_class }}" data-score="{{ chart.interest_score | int }}">
+      {% if chart.interest_score > 5 %}
+      <div class="score-bar" style="width:{{ [chart.interest_score * 0.8, 100] | min | int }}%"></div>
+      {% endif %}
+      <div class="card-top">
+        <div class="badges">
+          <span class="sbadge {{ chart.asset_class }}">{{ chart.asset_class | upper }}</span>
+          {% if chart.interest_score > 40 %}
+          <span class="abadge">Large move</span>
+          {% elif chart.interest_score > 25 %}
+          <span class="abadge sub">Notable</span>
+          {% endif %}
+        </div>
+        <div class="kpi">
+          <span class="kpi-val">{{ chart.last_formatted }}</span>
+          <span class="kpi-chg {{ 'up' if chart.daily_chg >= 0 else 'down' }}">{{ chart.daily_chg_formatted }}</span>
+        </div>
+      </div>
+      <h3 class="card-title">{{ chart.label }}</h3>
+      <p class="card-sub">{{ chart.subtitle }}</p>
+      <div class="chart-wrap">
+        <canvas id="chart-{{ chart.chart_id }}"
+                role="img"
+                aria-label="{{ chart.label }}: {{ chart.last_formatted }}, change {{ chart.daily_chg_formatted }}">
+        </canvas>
+      </div>
+      <footer class="card-foot">
+        <span class="src">Source: {{ chart.source_label }}</span>
+        <span class="asof">
+          {% if chart.date_last is string %}
+            {{ chart.date_last }}
+          {% else %}
+            {{ chart.date_last.strftime('%b %d, %Y') }}
+          {% endif %}
+        </span>
+      </footer>
+    </article>
+    {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <!-- FOOTER -->
+  <footer class="ftr">
+    <strong>The Daily Edge</strong> is generated automatically from public market data.<br>
+    Data: FRED (Federal Reserve Bank of St. Louis) &middot; Yahoo Finance.<br>
+    Feature engine computes percentile ranks, z-scores, momentum, drawdown, RSI, Bollinger bands
+    and mean-reversion half-lives over rolling 1M–3Y windows for every series in a 200+ instrument universe.<br>
+    Nothing herein constitutes investment advice. All percentile ranks are computed against each series’ own history.<br>
+    Generated: {{ generation_timestamp }}
+  </footer>
+
+</div><!-- .wrap -->
+
+<!-- ── Chart data ─────────────────────────────────────────────────────────────────── -->
+<script id="__chart_data__" type="application/json">{{ chart_configs_json | safe }}</script>
+<script>
+(function() {
+  // Register the annotation plugin (loaded via CDN above)
+  if (typeof ChartAnnotation !== 'undefined') {
+    Chart.register(ChartAnnotation);
+  }
+
+  var raw = document.getElementById('__chart_data__');
+  if (!raw) return;
+  var configs;
+  try {
+    configs = JSON.parse(raw.textContent);
+  } catch(e) {
+    console.error('Daily Edge: failed to parse chart data', e);
+    return;
+  }
+
+  configs.forEach(function(item) {
+    var el = document.getElementById('chart-' + item.id);
+    if (!el) return;
+    try {
+      new Chart(el, item.config);
+    } catch(err) {
+      console.warn('Daily Edge: chart init failed for', item.id, err);
+    }
+  });
+})();
+</script>
+</body>
+</html>
