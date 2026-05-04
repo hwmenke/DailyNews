@@ -1,135 +1,220 @@
 """
-database.py — SQLite cache for time series data.
-
-Schema:
-  time_series  (series_id, date, value)     — daily OHLC close or rate value
-  fetch_log    (series_id, source, ...)     — track last fetch per series
+database.py - SQLite manager for the Financial Dashboard
+Tables:
+  - symbols  : tracked tickers with metadata
+  - ohlcv    : OHLCV bars (daily + weekly)
 """
 
-import os
+import logging
 import sqlite3
-import datetime
+import os
 import pandas as pd
+from datetime import datetime, timezone
 
-DB_PATH = os.environ.get("DAILY_EDGE_DB", "daily_edge_cache.db")
+logger = logging.getLogger(__name__)
+
+DB_PATH = os.path.join(os.path.dirname(__file__), "finance.db")
 
 
-def _connect() -> sqlite3.Connection:
+def get_connection():
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    conn.row_factory = sqlite3.Row
     return conn
 
 
-def init_db() -> None:
+def init_db():
     """Create tables if they don't exist."""
-    with _connect() as conn:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS time_series (
-                series_id  TEXT    NOT NULL,
-                date       TEXT    NOT NULL,
-                value      REAL,
-                PRIMARY KEY (series_id, date)
-            );
-            CREATE INDEX IF NOT EXISTS idx_ts_series
-                ON time_series (series_id);
+    conn = get_connection()
+    cur = conn.cursor()
 
-            CREATE TABLE IF NOT EXISTS fetch_log (
-                series_id    TEXT    PRIMARY KEY,
-                source       TEXT,
-                last_fetched TEXT,
-                first_date   TEXT,
-                last_date    TEXT,
-                row_count    INTEGER
-            );
-        """)
-
-
-def upsert_series(series_id: str, series: pd.Series, source: str) -> int:
-    """
-    Store/update a pandas Series in the cache.
-    Returns number of rows written.
-    """
-    s = series.dropna()
-    if s.empty:
-        return 0
-    rows = [
-        (series_id, str(idx.date() if hasattr(idx, "date") else idx), float(v))
-        for idx, v in s.items()
-    ]
-    with _connect() as conn:
-        conn.executemany(
-            "INSERT OR REPLACE INTO time_series (series_id, date, value) VALUES (?,?,?)",
-            rows,
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS symbols (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol      TEXT    NOT NULL UNIQUE,
+            name        TEXT,
+            sector      TEXT,
+            added_at    TEXT    NOT NULL,
+            last_fetch  TEXT
         )
+    """)
+
+    for col, defn in [
+        ('group_tag',  "TEXT    DEFAULT ''"),
+        ('sort_order', 'INTEGER DEFAULT 0'),
+    ]:
+        try:
+            cur.execute(f"ALTER TABLE symbols ADD COLUMN {col} {defn}")
+        except Exception:
+            pass
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ohlcv (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol     TEXT    NOT NULL,
+            freq       TEXT    NOT NULL,
+            date       TEXT    NOT NULL,
+            open       REAL,
+            high       REAL,
+            low        REAL,
+            close      REAL,
+            volume     REAL,
+            UNIQUE(symbol, freq, date)
+        )
+    """)
+
+    cur.execute("""
+        CREATE INDEX IF NOT EXISTS idx_ohlcv ON ohlcv(symbol, freq, date)
+    """)
+
+    conn.commit()
+    conn.close()
+
+
+def list_symbols():
+    conn = get_connection()
+    rows = conn.execute(
+        "SELECT * FROM symbols ORDER BY COALESCE(NULLIF(group_tag,''), 'zzz'), symbol"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def set_symbol_group(symbol: str, group_tag: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE symbols SET group_tag=? WHERE symbol=?",
+        (group_tag.strip(), symbol.upper())
+    )
+    conn.commit()
+    conn.close()
+
+
+def add_symbol(symbol: str, name: str = "", sector: str = ""):
+    conn = get_connection()
+    now = datetime.now(timezone.utc).isoformat()
+    try:
         conn.execute(
-            """
-            INSERT OR REPLACE INTO fetch_log
-                (series_id, source, last_fetched, first_date, last_date, row_count)
-            VALUES (?, ?, date('now'), ?, ?, ?)
-            """,
-            (
-                series_id,
-                source,
-                str(s.index[0].date() if hasattr(s.index[0], "date") else s.index[0]),
-                str(s.index[-1].date() if hasattr(s.index[-1], "date") else s.index[-1]),
-                len(rows),
-            ),
+            "INSERT INTO symbols (symbol, name, sector, added_at) VALUES (?,?,?,?)",
+            (symbol.upper(), name, sector, now)
         )
-    return len(rows)
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
 
 
-def get_series(series_id: str) -> pd.Series:
-    """Load a cached series as a pandas Series with DatetimeIndex, sorted ascending."""
-    with _connect() as conn:
-        rows = conn.execute(
-            "SELECT date, value FROM time_series WHERE series_id=? ORDER BY date",
-            (series_id,),
-        ).fetchall()
+def remove_symbol(symbol: str):
+    conn = get_connection()
+    conn.execute("DELETE FROM symbols WHERE symbol = ?", (symbol.upper(),))
+    conn.execute("DELETE FROM ohlcv WHERE symbol = ?", (symbol.upper(),))
+    conn.commit()
+    conn.close()
+
+
+def update_last_fetch(symbol: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE symbols SET last_fetch = ? WHERE symbol = ?",
+        (datetime.now(timezone.utc).isoformat(), symbol.upper())
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_symbol_info(symbol: str, name: str, sector: str):
+    conn = get_connection()
+    conn.execute(
+        "UPDATE symbols SET name = ?, sector = ? WHERE symbol = ?",
+        (name, sector, symbol.upper())
+    )
+    conn.commit()
+    conn.close()
+
+
+def upsert_ohlcv(symbol: str, freq: str, df: pd.DataFrame):
+    conn = get_connection()
+    sym = symbol.upper()
+    params = []
+    for date_idx, row in df.iterrows():
+        date_str = date_idx.strftime("%Y-%m-%d")
+        try:
+            params.append((
+                sym, freq, date_str,
+                float(row["open"]), float(row["high"]),
+                float(row["low"]),  float(row["close"]),
+                float(row["volume"])
+            ))
+        except Exception as exc:
+            logger.warning("upsert_ohlcv skipped row %s %s %s: %s", sym, freq, date_str, exc)
+
+    if params:
+        conn.executemany(
+            """
+            INSERT INTO ohlcv (symbol, freq, date, open, high, low, close, volume)
+            VALUES (?,?,?,?,?,?,?,?)
+            ON CONFLICT(symbol, freq, date) DO UPDATE SET
+                open   = excluded.open,
+                high   = excluded.high,
+                low    = excluded.low,
+                close  = excluded.close,
+                volume = excluded.volume
+            """,
+            params
+        )
+    conn.commit()
+    conn.close()
+    return len(params)
+
+
+def get_ohlcv(symbol: str, freq: str = "daily", limit: int = 500) -> list:
+    conn = get_connection()
+    query = """
+        SELECT * FROM (
+            SELECT date, open, high, low, close, volume
+            FROM ohlcv
+            WHERE symbol = ? AND freq = ?
+            ORDER BY date DESC
+            LIMIT ?
+        ) ORDER BY date ASC
+    """
+    rows = conn.execute(query, (symbol.upper(), freq, limit)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_ohlcv_df(symbol: str, freq: str = "daily", limit: int = 1000) -> pd.DataFrame:
+    rows = get_ohlcv(symbol, freq, limit=limit)
     if not rows:
-        return pd.Series(dtype=float, name=series_id)
-    dates, values = zip(*rows)
-    idx = pd.DatetimeIndex(dates)
-    return pd.Series(list(values), index=idx, name=series_id)
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df["date"] = pd.to_datetime(df["date"])
+    df.set_index("date", inplace=True)
+    df.sort_index(inplace=True)
+    return df
 
 
-def get_last_date(series_id: str) -> str | None:
-    """Return the most recent cached date for a series, or None."""
-    with _connect() as conn:
-        row = conn.execute(
-            "SELECT last_date FROM fetch_log WHERE series_id=?", (series_id,)
-        ).fetchone()
-    return row[0] if row else None
+def is_recently_fetched(symbol: str, hours: int = 23) -> bool:
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT last_fetch FROM symbols WHERE symbol = ?", (symbol.upper(),)
+    ).fetchone()
+    conn.close()
+    if not row or not row["last_fetch"]:
+        return False
+    from datetime import timedelta
+    last = datetime.fromisoformat(row["last_fetch"])
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return datetime.now(timezone.utc) - last < timedelta(hours=hours)
 
 
-def list_cached_series() -> list[dict]:
-    """Return all series present in the fetch log."""
-    with _connect() as conn:
-        rows = conn.execute(
-            "SELECT series_id, source, last_fetched, first_date, last_date, row_count "
-            "FROM fetch_log ORDER BY series_id"
-        ).fetchall()
-    return [
-        {
-            "series_id": r[0],
-            "source": r[1],
-            "last_fetched": r[2],
-            "first_date": r[3],
-            "last_date": r[4],
-            "row_count": r[5],
-        }
-        for r in rows
-    ]
-
-
-def get_cache_stats() -> dict:
-    """Return summary stats about the cache."""
-    with _connect() as conn:
-        total_series = conn.execute("SELECT COUNT(*) FROM fetch_log").fetchone()[0]
-        total_rows = conn.execute("SELECT COUNT(*) FROM time_series").fetchone()[0]
-        db_size_mb = os.path.getsize(DB_PATH) / 1024 / 1024 if os.path.exists(DB_PATH) else 0
-    return {
-        "total_series": total_series,
-        "total_rows": total_rows,
-        "db_size_mb": round(db_size_mb, 2),
-    }
+def get_latest_ohlcv_date(symbol: str, freq: str = "daily"):
+    conn = get_connection()
+    row = conn.execute(
+        "SELECT MAX(date) AS d FROM ohlcv WHERE symbol = ? AND freq = ?",
+        (symbol.upper(), freq)
+    ).fetchone()
+    conn.close()
+    return row["d"] if row and row["d"] else None
