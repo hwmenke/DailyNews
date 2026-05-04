@@ -33,8 +33,8 @@ try:
 except ImportError:
     RICH = False
 
-import database as db
-import data_fetcher as fetcher
+import nl_cache as db
+import nl_fetcher as fetcher
 from features import engineer_all_features
 from story_selector import select_stories
 from newsletter_generator import generate_newsletter
