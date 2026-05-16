@@ -607,6 +607,12 @@ function showLoadingOverlay(show) {
     document.getElementById('chart-loading').style.display = show ? 'flex' : 'none';
 }
 
+// ── Tab Registry ──────────────────────────────────────────────
+const _tabRegistry = {};
+window.registerTab = function(id, { onShow, onHide } = {}) {
+    _tabRegistry[id] = { onShow, onHide };
+};
+
 // ── Tab Switching ──────────────────────────────────────────────
 async function switchTab(tabId) {
     state.activeTab = tabId;
@@ -649,6 +655,11 @@ async function switchTab(tabId) {
     } else if (tabId === 'data-manager') {
         showDataManagerArea();
         initDataManager();
+    }
+
+    // Call any registered onShow handler for this tab
+    if (_tabRegistry[tabId] && _tabRegistry[tabId].onShow) {
+        _tabRegistry[tabId].onShow();
     }
 }
 

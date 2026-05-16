@@ -6,30 +6,52 @@
     let _view    = 'grid';
     let _filter  = 'all';
 
-    // ── Patch switchTab ──────────────────────────────────────
+    // ── Tab registration (preferred) with monkey-patch fallback ──
     document.addEventListener('DOMContentLoaded', function () {
-        const _orig = window.switchTab;
-        window.switchTab = async function (tabId) {
-            const area = document.getElementById('daily-edge-area');
-            if (area) area.style.display = 'none';
-            if (tabId === 'daily-edge') {
-                document.querySelectorAll('.tab-btn').forEach(function (btn) {
-                    btn.classList.toggle('active', btn.id === 'tab-daily-edge');
-                });
-                ['empty-state','chart-area','stats-area','knn-area',
-                 'backtest-area','trend-area','scanner-area','data-manager-area'
-                ].forEach(function (id) {
-                    var el = document.getElementById(id);
-                    if (el) el.style.display = 'none';
-                });
-                var tabBar = document.querySelector('.tab-bar');
-                if (tabBar) tabBar.style.display = 'none';
-                if (area) area.style.display = 'flex';
-                if (!_loaded) { _loaded = true; loadNewsletterData(); }
-            } else {
-                if (typeof _orig === 'function') await _orig(tabId);
-            }
-        };
+        if (window.registerTab) {
+            window.registerTab('daily-edge', {
+                onShow: function () {
+                    var area = document.getElementById('daily-edge-area');
+                    ['empty-state','chart-area','stats-area','knn-area',
+                     'backtest-area','trend-area','scanner-area','data-manager-area'
+                    ].forEach(function (id) {
+                        var el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    });
+                    var tabBar = document.querySelector('.tab-bar');
+                    if (tabBar) tabBar.style.display = 'none';
+                    if (area) area.style.display = 'flex';
+                    if (!_loaded) { _loaded = true; loadNewsletterData(); }
+                },
+                onHide: function () {
+                    // nothing to clean up
+                }
+            });
+        } else {
+            // fallback: monkey-patch switchTab as safety net
+            var _orig = window.switchTab;
+            window.switchTab = async function (tabId) {
+                var area = document.getElementById('daily-edge-area');
+                if (area) area.style.display = 'none';
+                if (tabId === 'daily-edge') {
+                    document.querySelectorAll('.tab-btn').forEach(function (btn) {
+                        btn.classList.toggle('active', btn.id === 'tab-daily-edge');
+                    });
+                    ['empty-state','chart-area','stats-area','knn-area',
+                     'backtest-area','trend-area','scanner-area','data-manager-area'
+                    ].forEach(function (id) {
+                        var el = document.getElementById(id);
+                        if (el) el.style.display = 'none';
+                    });
+                    var tabBar = document.querySelector('.tab-bar');
+                    if (tabBar) tabBar.style.display = 'none';
+                    if (area) area.style.display = 'flex';
+                    if (!_loaded) { _loaded = true; loadNewsletterData(); }
+                } else {
+                    if (typeof _orig === 'function') await _orig(tabId);
+                }
+            };
+        }
     });
 
     // ── Data fetch ───────────────────────────────────────────
@@ -129,7 +151,8 @@
             card.querySelector('.nl-lead-sym').addEventListener('click', function () {
                 if (typeof selectSymbol === 'function') selectSymbol(s.symbol);
             });
-            if (s.chart_config) { try { new Chart(card.querySelector('.nl-chart-canvas'), s.chart_config); } catch (_) {} }
+            // Bug fix: use .chart (not .chart_config)
+            if (s.chart) { try { new Chart(card.querySelector('.nl-chart-canvas'), s.chart); } catch (_) {} }
             container.appendChild(card);
         });
     }
@@ -156,13 +179,14 @@
                   _scoreBarHtml(scoreVal) +
                 '</div>' +
                 '<div class="nl-card-subtitle">' + (c.subtitle || '') + '</div>';
-            if (c.chart_config) {
+            // Bug fix: use .chart (not .chart_config)
+            if (c.chart) {
                 var wrap = document.createElement('div');
                 wrap.className = 'nl-card-chart';
                 var canvas = document.createElement('canvas');
                 wrap.appendChild(canvas);
                 card.appendChild(wrap);
-                try { new Chart(canvas, c.chart_config); } catch (_) {}
+                try { new Chart(canvas, c.chart); } catch (_) {}
             }
             var metricsDiv = document.createElement('div');
             metricsDiv.className = 'nl-metrics-row';
@@ -202,8 +226,9 @@
                 _score:    '<td class="' + (scoreVal >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (scoreVal >= 0 ? '+' : '') + scoreVal.toFixed(2) + '</td>',
                 _regime:   '<td><span class="nl-regime-pill nl-regime-' + regime.cls + '">' + regime.label + '</span></td>',
                 rsi:       '<td>' + (f.rsi != null ? (+f.rsi).toFixed(1) : '—') + '</td>',
-                roc_5d:    '<td class="' + (f.roc_5d >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (f.roc_5d != null ? (f.roc_5d >= 0 ? '+' : '') + (f.roc_5d * 100).toFixed(1) + '%' : '—') + '</td>',
-                roc_20d:   '<td class="' + (f.roc_20d >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (f.roc_20d != null ? (f.roc_20d >= 0 ? '+' : '') + (f.roc_20d * 100).toFixed(1) + '%' : '—') + '</td>',
+                // Bug fix: values are already in percent — no * 100
+                roc_5d:    '<td class="' + (f.roc_5d >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (f.roc_5d != null ? (f.roc_5d >= 0 ? '+' : '') + (+f.roc_5d).toFixed(1) + '%' : '—') + '</td>',
+                roc_20d:   '<td class="' + (f.roc_20d >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (f.roc_20d != null ? (f.roc_20d >= 0 ? '+' : '') + (+f.roc_20d).toFixed(1) + '%' : '—') + '</td>',
                 vol_ratio: '<td>' + (f.vol_ratio != null ? (+f.vol_ratio).toFixed(2) + 'x' : '—') + '</td>',
                 k10pct:    '<td>' + k10pct + '</td>',
                 subtitle:  '<td class="nl-tbl-sub">' + (item.subtitle || '') + '</td>',
@@ -221,7 +246,8 @@
 
     // ── Helpers ──────────────────────────────────────────────
     function _regime(item) {
-        var ts = (item.features || {}).trend_score;
+        // Bug fix: trend_score is at the top level of the card object, not nested under .features
+        var ts = item.trend_score;
         if (ts >  0) return { label: 'LONG',    cls: 'bull' };
         if (ts <  0) return { label: 'SHORT',   cls: 'bear' };
         return             { label: 'NEUTRAL',  cls: 'neut' };
@@ -236,7 +262,8 @@
     function _metricsHtml(item, large) {
         var f   = item.features || {};
         var fmt = function (v, d) { return v != null ? (+v).toFixed(d != null ? d : 1) : '—'; };
-        var pct = function (v) { return v != null ? (v >= 0 ? '+' : '') + (+v * 100).toFixed(1) + '%' : '—'; };
+        // Bug fix: values are already in percent — no * 100
+        var pct = function (v) { return v != null ? (v >= 0 ? '+' : '') + (+v).toFixed(1) + '%' : '—'; };
         var cls = function (v) { return v != null && +v >= 0 ? 'nl-pos' : 'nl-neg'; };
         var rsiCls = function (v) { if (v == null) return ''; return v < 35 ? 'nl-pos' : v > 65 ? 'nl-neg' : ''; };
         var k10pct = (f.kama10 != null && f.price != null)
@@ -249,8 +276,8 @@
             ['Vol×',   f.vol_ratio != null ? fmt(f.vol_ratio, 2) + 'x' : '—', ''],
             ['K10%',   k10pct,                                              k10cls],
         ];
-        if (large) fields.push(['Trend', f.trend_score != null ? fmt(f.trend_score, 0) : '—',
-                                 f.trend_score > 0 ? 'nl-pos' : f.trend_score < 0 ? 'nl-neg' : '']);
+        if (large) fields.push(['Trend', item.trend_score != null ? fmt(item.trend_score, 2) : '—',
+                                 item.trend_score > 0 ? 'nl-pos' : item.trend_score < 0 ? 'nl-neg' : '']);
         return fields.map(function (row) {
             return '<div class="nl-metric">' +
                    '<span class="nl-metric-label">' + row[0] + '</span>' +
