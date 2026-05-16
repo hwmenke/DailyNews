@@ -1,0 +1,14 @@
+services:
+  web:
+    build: .
+    ports:
+      - "8050:8050"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=8050
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+      # Set FRED_API_KEY here or in a .env file
+      # - FRED_API_KEY=your_key_here
+    restart: unless-stopped
