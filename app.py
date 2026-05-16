@@ -21,6 +21,14 @@ import adaptive_trend as adaptive
 import ticker_lists as tl
 import newsletter_engine
 
+import logging
+
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__, static_folder=".", static_url_path="")
 CORS(app)
 
@@ -72,16 +80,16 @@ def set_symbol_group(symbol):
 
 @app.route("/api/fetch/<string:symbol>", methods=["POST"])
 def fetch_symbol(symbol):
-    print(f">> API: Fetch request for {symbol}")
+    logger.info("Fetch request for %s", symbol)
     try:
         result = fetcher.fetch_and_store(symbol.upper())
         if "error" in result:
-            print(f"!! API: Error fetching {symbol}: {result['error']}")
+            logger.warning("Error fetching %s: %s", symbol, result["error"])
             return jsonify(result), 400
-        print(f"<< API: Successfully fetched {symbol}")
+        logger.info("Successfully fetched %s", symbol)
         return jsonify(result)
     except Exception as e:
-        print(f"!! API: Exception fetching {symbol}: {str(e)}")
+        logger.error("Exception fetching %s: %s", symbol, e)
         return jsonify({"error": str(e)}), 500
 
 
@@ -466,5 +474,5 @@ def get_newsletter_data():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8050))
-    print(f"\n  Financial Dashboard running at http://localhost:{port}\n")
-    app.run(debug=True, port=port)
+    logger.info("Financial Dashboard running at http://localhost:%s", port)
+    app.run(debug=os.environ.get("DEBUG", "false").lower() == "true", threaded=True, port=port)

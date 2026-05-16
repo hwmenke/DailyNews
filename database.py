@@ -25,6 +25,8 @@ def get_connection():
 def init_db():
     """Create tables if they don't exist."""
     conn = get_connection()
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")
     cur = conn.cursor()
 
     cur.execute("""
@@ -72,21 +74,25 @@ def init_db():
 
 def list_symbols():
     conn = get_connection()
-    rows = conn.execute(
-        "SELECT * FROM symbols ORDER BY COALESCE(NULLIF(group_tag,''), 'zzz'), symbol"
-    ).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        rows = conn.execute(
+            "SELECT * FROM symbols ORDER BY COALESCE(NULLIF(group_tag,''), 'zzz'), symbol"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 def set_symbol_group(symbol: str, group_tag: str):
     conn = get_connection()
-    conn.execute(
-        "UPDATE symbols SET group_tag=? WHERE symbol=?",
-        (group_tag.strip(), symbol.upper())
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "UPDATE symbols SET group_tag=? WHERE symbol=?",
+            (group_tag.strip(), symbol.upper())
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def add_symbol(symbol: str, name: str = "", sector: str = ""):
@@ -107,30 +113,36 @@ def add_symbol(symbol: str, name: str = "", sector: str = ""):
 
 def remove_symbol(symbol: str):
     conn = get_connection()
-    conn.execute("DELETE FROM symbols WHERE symbol = ?", (symbol.upper(),))
-    conn.execute("DELETE FROM ohlcv WHERE symbol = ?", (symbol.upper(),))
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute("DELETE FROM symbols WHERE symbol = ?", (symbol.upper(),))
+        conn.execute("DELETE FROM ohlcv WHERE symbol = ?", (symbol.upper(),))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def update_last_fetch(symbol: str):
     conn = get_connection()
-    conn.execute(
-        "UPDATE symbols SET last_fetch = ? WHERE symbol = ?",
-        (datetime.now(timezone.utc).isoformat(), symbol.upper())
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "UPDATE symbols SET last_fetch = ? WHERE symbol = ?",
+            (datetime.now(timezone.utc).isoformat(), symbol.upper())
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def update_symbol_info(symbol: str, name: str, sector: str):
     conn = get_connection()
-    conn.execute(
-        "UPDATE symbols SET name = ?, sector = ? WHERE symbol = ?",
-        (name, sector, symbol.upper())
-    )
-    conn.commit()
-    conn.close()
+    try:
+        conn.execute(
+            "UPDATE symbols SET name = ?, sector = ? WHERE symbol = ?",
+            (name, sector, symbol.upper())
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def upsert_ohlcv(symbol: str, freq: str, df: pd.DataFrame):
@@ -149,23 +161,25 @@ def upsert_ohlcv(symbol: str, freq: str, df: pd.DataFrame):
         except Exception as exc:
             logger.warning("upsert_ohlcv skipped row %s %s %s: %s", sym, freq, date_str, exc)
 
-    if params:
-        conn.executemany(
-            """
-            INSERT INTO ohlcv (symbol, freq, date, open, high, low, close, volume)
-            VALUES (?,?,?,?,?,?,?,?)
-            ON CONFLICT(symbol, freq, date) DO UPDATE SET
-                open   = excluded.open,
-                high   = excluded.high,
-                low    = excluded.low,
-                close  = excluded.close,
-                volume = excluded.volume
-            """,
-            params
-        )
-    conn.commit()
-    conn.close()
-    return len(params)
+    try:
+        if params:
+            conn.executemany(
+                """
+                INSERT INTO ohlcv (symbol, freq, date, open, high, low, close, volume)
+                VALUES (?,?,?,?,?,?,?,?)
+                ON CONFLICT(symbol, freq, date) DO UPDATE SET
+                    open   = excluded.open,
+                    high   = excluded.high,
+                    low    = excluded.low,
+                    close  = excluded.close,
+                    volume = excluded.volume
+                """,
+                params
+            )
+        conn.commit()
+        return len(params)
+    finally:
+        conn.close()
 
 
 def get_ohlcv(symbol: str, freq: str = "daily", limit: int = 500) -> list:
@@ -179,9 +193,11 @@ def get_ohlcv(symbol: str, freq: str = "daily", limit: int = 500) -> list:
             LIMIT ?
         ) ORDER BY date ASC
     """
-    rows = conn.execute(query, (symbol.upper(), freq, limit)).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    try:
+        rows = conn.execute(query, (symbol.upper(), freq, limit)).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 
 def get_ohlcv_df(symbol: str, freq: str = "daily", limit: int = 1000) -> pd.DataFrame:
@@ -197,10 +213,12 @@ def get_ohlcv_df(symbol: str, freq: str = "daily", limit: int = 1000) -> pd.Data
 
 def is_recently_fetched(symbol: str, hours: int = 23) -> bool:
     conn = get_connection()
-    row = conn.execute(
-        "SELECT last_fetch FROM symbols WHERE symbol = ?", (symbol.upper(),)
-    ).fetchone()
-    conn.close()
+    try:
+        row = conn.execute(
+            "SELECT last_fetch FROM symbols WHERE symbol = ?", (symbol.upper(),)
+        ).fetchone()
+    finally:
+        conn.close()
     if not row or not row["last_fetch"]:
         return False
     from datetime import timedelta
@@ -212,9 +230,11 @@ def is_recently_fetched(symbol: str, hours: int = 23) -> bool:
 
 def get_latest_ohlcv_date(symbol: str, freq: str = "daily"):
     conn = get_connection()
-    row = conn.execute(
-        "SELECT MAX(date) AS d FROM ohlcv WHERE symbol = ? AND freq = ?",
-        (symbol.upper(), freq)
-    ).fetchone()
-    conn.close()
-    return row["d"] if row and row["d"] else None
+    try:
+        row = conn.execute(
+            "SELECT MAX(date) AS d FROM ohlcv WHERE symbol = ? AND freq = ?",
+            (symbol.upper(), freq)
+        ).fetchone()
+        return row["d"] if row and row["d"] else None
+    finally:
+        conn.close()

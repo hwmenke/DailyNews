@@ -8,9 +8,13 @@ Returns JSON-serializable dict consumed by /api/newsletter/data.
 from __future__ import annotations
 import datetime
 import math
+import time
 import numpy as np
 import pandas as pd
 import database as db
+
+_CACHE: dict = {"data": None, "ts": 0.0, "n": -1}
+_CACHE_TTL = 300  # 5-minute TTL
 
 
 # ── Indicators ──────────────────────────────────────────────────────────────────
@@ -132,12 +136,29 @@ def engineer_features(df: pd.DataFrame) -> dict | None:
     else:
         zscore_vals = [None] * len(dates)
 
+    roc5d  = _roc(5)
+    roc20d = _roc(20)
+    roc63d = _roc(63)
+
+    # Trend score: directional aggregate of momentum + KAMA signals, range [-1, 1]
+    _ts: list[float] = []
+    for rv in [roc5d, roc20d]:
+        if rv is not None:
+            _ts.append(1.0 if rv > 0 else -1.0)
+    for kd in kama_dists.values():
+        if kd is not None:
+            _ts.append(1.0 if kd > 2 else (-1.0 if kd < -2 else 0.0))
+    if rsi is not None:
+        _ts.append(1.0 if rsi > 60 else (-1.0 if rsi < 40 else 0.0))
+    trend_score = round(sum(_ts) / max(len(_ts), 1), 4)
+
     return {
         'price':       round(price, 2),
         'rsi':         rsi,
-        'roc_5d':      _roc(5),
-        'roc_20d':     _roc(20),
-        'roc_63d':     _roc(63),
+        'roc_5d':      roc5d,
+        'roc_20d':     roc20d,
+        'roc_63d':     roc63d,
+        'trend_score': trend_score,
         'vol_pct':     vol,
         'atr_pct':     atr_pct,
         'vol_ratio':   vol_ratio,
@@ -388,14 +409,15 @@ def _build_card(sym: str, f: dict, score: float, color: str) -> dict:
                                  upper=upper, lower=lower)
 
     return {
-        'symbol':     sym,
-        'price':      price,
-        'chg_pct':    round(roc5 or 0, 2),
-        'roc_20d':    roc20,
-        'score':      score,
-        'subtitle':   _build_subtitle(sym, f, score),
-        'chart':      chart,
-        'chart_type': chart_type,
+        'symbol':      sym,
+        'price':       price,
+        'chg_pct':     round(roc5 or 0, 2),
+        'roc_20d':     roc20,
+        'score':       score,
+        'trend_score': score,
+        'subtitle':    _build_subtitle(sym, f, score),
+        'chart':       chart,
+        'chart_type':  chart_type,
         'metrics': {
             'rsi':        f.get('rsi'),
             'vol_pct':    f.get('vol_pct'),
@@ -412,11 +434,17 @@ def _build_card(sym: str, f: dict, score: float, color: str) -> dict:
 
 def compute_newsletter_data(n_charts: int = 20) -> dict:
     """Compute newsletter data for all watchlist symbols."""
+    _now = time.monotonic()
+    if (_CACHE["data"] is not None and
+            _CACHE["n"] == n_charts and
+            (_now - _CACHE["ts"]) < _CACHE_TTL):
+        return _CACHE["data"]
+
     symbols = [s['symbol'] for s in db.list_symbols()]
     if not symbols:
         return {
             'lead_stories': [], 'cards': [], 'symbol_count': 0,
-            'generated_at': datetime.datetime.utcnow().isoformat(),
+            'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
             'error': 'No symbols in watchlist.',
         }
 
@@ -450,11 +478,12 @@ def compute_newsletter_data(n_charts: int = 20) -> dict:
             headline = (f"{sym} falls {abs(roc5):.1f}% over 5 days "
                         f"— RSI {rsi:.0f}, KAMA10 {k10:+.1f}%")
         lead_stories.append({
-            'symbol':   sym,
-            'price':    f['price'],
-            'chg_pct':  round(roc5, 2),
-            'headline': headline,
-            'subtitle': _build_subtitle(sym, f, row['score']),
+            'symbol':      sym,
+            'price':       f['price'],
+            'chg_pct':     round(roc5, 2),
+            'headline':    headline,
+            'subtitle':    _build_subtitle(sym, f, row['score']),
+            'trend_score': row['score'],
         })
 
     cards = [
@@ -463,9 +492,13 @@ def compute_newsletter_data(n_charts: int = 20) -> dict:
         for i, row in enumerate(ranked)
     ]
 
-    return {
+    result = {
         'lead_stories': lead_stories,
         'cards':        cards,
         'symbol_count': len(symbols),
-        'generated_at': datetime.datetime.utcnow().isoformat(),
+        'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
+    _CACHE["data"] = result
+    _CACHE["ts"]   = time.monotonic()
+    _CACHE["n"]    = n_charts
+    return result
