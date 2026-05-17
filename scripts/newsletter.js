@@ -88,12 +88,13 @@
             if (_filter === 'bear') return (item.score || 0) < 0;
             return true;
         };
+
+        // Sort using top-level card fields (not item.features which doesn't exist)
         var sortFn = function (a, b) {
-            var af = a.features || {}, bf = b.features || {};
-            if (sortKey === 'momentum') return (bf.roc_5d || 0) - (af.roc_5d || 0);
-            if (sortKey === 'volume')   return (bf.vol_ratio || 0) - (af.vol_ratio || 0);
-            if (sortKey === 'rsi_low')  return (af.rsi || 50) - (bf.rsi || 50);
-            if (sortKey === 'rsi_high') return (bf.rsi || 50) - (af.rsi || 50);
+            if (sortKey === 'momentum') return (b.roc_5d || 0) - (a.roc_5d || 0);
+            if (sortKey === 'volume')   return (b.vol_ratio || 0) - (a.vol_ratio || 0);
+            if (sortKey === 'rsi_low')  return ((a.metrics || {}).rsi || 50) - ((b.metrics || {}).rsi || 50);
+            if (sortKey === 'rsi_high') return ((b.metrics || {}).rsi || 50) - ((a.metrics || {}).rsi || 50);
             return (b.score || 0) - (a.score || 0);
         };
 
@@ -151,7 +152,6 @@
             card.querySelector('.nl-lead-sym').addEventListener('click', function () {
                 if (typeof selectSymbol === 'function') selectSymbol(s.symbol);
             });
-            // Bug fix: use .chart (not .chart_config)
             if (s.chart) { try { new Chart(card.querySelector('.nl-chart-canvas'), s.chart); } catch (_) {} }
             container.appendChild(card);
         });
@@ -179,7 +179,6 @@
                   _scoreBarHtml(scoreVal) +
                 '</div>' +
                 '<div class="nl-card-subtitle">' + (c.subtitle || '') + '</div>';
-            // Bug fix: use .chart (not .chart_config)
             if (c.chart) {
                 var wrap = document.createElement('div');
                 wrap.className = 'nl-card-chart';
@@ -216,20 +215,20 @@
         ];
         var thead = '<thead><tr>' + cols.map(function (c) { return '<th>' + c.label + '</th>'; }).join('') + '</tr></thead>';
         var tbody = '<tbody>' + items.map(function (item) {
-            var f        = item.features || {};
+            var m        = item.metrics || {};
             var scoreVal = item.score || 0;
             var regime   = _regime(item);
-            var k10pct   = (f.kama10 != null && f.price != null)
-                ? (f.price >= f.kama10 ? '+' : '') + ((f.price - f.kama10) / f.kama10 * 100).toFixed(1) + '%' : '—';
+            // kama10 in metrics is already the % distance from KAMA10
+            var k10pct   = m.kama10 != null
+                ? (m.kama10 >= 0 ? '+' : '') + (+m.kama10).toFixed(1) + '%' : '—';
             var cells = {
                 symbol:    '<td class="nl-tbl-sym">' + item.symbol + '</td>',
                 _score:    '<td class="' + (scoreVal >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (scoreVal >= 0 ? '+' : '') + scoreVal.toFixed(2) + '</td>',
                 _regime:   '<td><span class="nl-regime-pill nl-regime-' + regime.cls + '">' + regime.label + '</span></td>',
-                rsi:       '<td>' + (f.rsi != null ? (+f.rsi).toFixed(1) : '—') + '</td>',
-                // Bug fix: values are already in percent — no * 100
-                roc_5d:    '<td class="' + (f.roc_5d >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (f.roc_5d != null ? (f.roc_5d >= 0 ? '+' : '') + (+f.roc_5d).toFixed(1) + '%' : '—') + '</td>',
-                roc_20d:   '<td class="' + (f.roc_20d >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (f.roc_20d != null ? (f.roc_20d >= 0 ? '+' : '') + (+f.roc_20d).toFixed(1) + '%' : '—') + '</td>',
-                vol_ratio: '<td>' + (f.vol_ratio != null ? (+f.vol_ratio).toFixed(2) + 'x' : '—') + '</td>',
+                rsi:       '<td>' + (m.rsi != null ? (+m.rsi).toFixed(1) : '—') + '</td>',
+                roc_5d:    '<td class="' + ((item.roc_5d || 0) >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (item.roc_5d != null ? ((item.roc_5d >= 0 ? '+' : '') + (+item.roc_5d).toFixed(1) + '%') : '—') + '</td>',
+                roc_20d:   '<td class="' + ((item.roc_20d || 0) >= 0 ? 'nl-pos' : 'nl-neg') + '">' + (item.roc_20d != null ? ((item.roc_20d >= 0 ? '+' : '') + (+item.roc_20d).toFixed(1) + '%') : '—') + '</td>',
+                vol_ratio: '<td>' + (item.vol_ratio != null ? (+item.vol_ratio).toFixed(2) + 'x' : '—') + '</td>',
                 k10pct:    '<td>' + k10pct + '</td>',
                 subtitle:  '<td class="nl-tbl-sub">' + (item.subtitle || '') + '</td>',
             };
@@ -246,7 +245,7 @@
 
     // ── Helpers ──────────────────────────────────────────────
     function _regime(item) {
-        // Bug fix: trend_score is at the top level of the card object, not nested under .features
+        // trend_score is at the top level of the card/lead object
         var ts = item.trend_score;
         if (ts >  0) return { label: 'LONG',    cls: 'bull' };
         if (ts <  0) return { label: 'SHORT',   cls: 'bear' };
@@ -260,21 +259,21 @@
     }
 
     function _metricsHtml(item, large) {
-        var f   = item.features || {};
+        var m   = item.metrics || {};
         var fmt = function (v, d) { return v != null ? (+v).toFixed(d != null ? d : 1) : '—'; };
-        // Bug fix: values are already in percent — no * 100
+        // Values are already in percent — do NOT multiply by 100
         var pct = function (v) { return v != null ? (v >= 0 ? '+' : '') + (+v).toFixed(1) + '%' : '—'; };
         var cls = function (v) { return v != null && +v >= 0 ? 'nl-pos' : 'nl-neg'; };
         var rsiCls = function (v) { if (v == null) return ''; return v < 35 ? 'nl-pos' : v > 65 ? 'nl-neg' : ''; };
-        var k10pct = (f.kama10 != null && f.price != null)
-            ? (f.price >= f.kama10 ? '+' : '') + ((f.price - f.kama10) / f.kama10 * 100).toFixed(1) + '%' : '—';
-        var k10cls = (f.kama10 != null && f.price != null) ? (f.price >= f.kama10 ? 'nl-pos' : 'nl-neg') : '';
+        // kama10 in metrics is already the % distance
+        var k10pct = m.kama10 != null ? (m.kama10 >= 0 ? '+' : '') + (+m.kama10).toFixed(1) + '%' : '—';
+        var k10cls = m.kama10 != null ? (m.kama10 >= 0 ? 'nl-pos' : 'nl-neg') : '';
         var fields = [
-            ['RSI',    fmt(f.rsi, 1),                                       rsiCls(f.rsi)],
-            ['ROC 5D', pct(f.roc_5d),                                       cls(f.roc_5d)],
-            ['ROC 20D',pct(f.roc_20d),                                      cls(f.roc_20d)],
-            ['Vol×',   f.vol_ratio != null ? fmt(f.vol_ratio, 2) + 'x' : '—', ''],
-            ['K10%',   k10pct,                                              k10cls],
+            ['RSI',    fmt(m.rsi, 1),               rsiCls(m.rsi)],
+            ['ROC 5D', pct(item.roc_5d),            cls(item.roc_5d)],
+            ['ROC 20D',pct(item.roc_20d),           cls(item.roc_20d)],
+            ['Vol×',   item.vol_ratio != null ? fmt(item.vol_ratio, 2) + 'x' : '—', ''],
+            ['K10%',   k10pct,                      k10cls],
         ];
         if (large) fields.push(['Trend', item.trend_score != null ? fmt(item.trend_score, 2) : '—',
                                  item.trend_score > 0 ? 'nl-pos' : item.trend_score < 0 ? 'nl-neg' : '']);

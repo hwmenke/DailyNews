@@ -412,7 +412,9 @@ def _build_card(sym: str, f: dict, score: float, color: str) -> dict:
         'symbol':      sym,
         'price':       price,
         'chg_pct':     round(roc5 or 0, 2),
+        'roc_5d':      roc5,
         'roc_20d':     roc20,
+        'vol_ratio':   f.get('vol_ratio'),
         'score':       score,
         'trend_score': score,
         'subtitle':    _build_subtitle(sym, f, score),
@@ -480,10 +482,22 @@ def compute_newsletter_data(n_charts: int = 20) -> dict:
         lead_stories.append({
             'symbol':      sym,
             'price':       f['price'],
+            'score':       row['score'],
+            'trend_score': row['score'],
             'chg_pct':     round(roc5, 2),
+            'roc_5d':      f.get('roc_5d'),
+            'roc_20d':     f.get('roc_20d'),
+            'vol_ratio':   f.get('vol_ratio'),
             'headline':    headline,
             'subtitle':    _build_subtitle(sym, f, row['score']),
-            'trend_score': row['score'],
+            'metrics': {
+                'rsi':         f.get('rsi'),
+                'kama10':      f.get('kama10'),
+                'kama20':      f.get('kama20'),
+                'kama50':      f.get('kama50'),
+                'dist_hi52w':  f.get('dist_hi52w'),
+                'dist_sma200': f.get('dist_sma200'),
+            },
         })
 
     cards = [
