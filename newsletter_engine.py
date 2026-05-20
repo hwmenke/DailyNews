@@ -8,16 +8,19 @@ Returns JSON-serializable dict consumed by /api/newsletter/data.
 from __future__ import annotations
 import datetime
 import math
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import pandas as pd
 import database as db
 
 _CACHE: dict = {"data": None, "ts": 0.0, "n": -1}
+_CACHE_LOCK = threading.Lock()
 _CACHE_TTL = 300  # 5-minute TTL
 
 
-# ── Indicators ──────────────────────────────────────────────────────────────────
+# ── Indicators ───────────────────────────────────────────────────────────────────────
 
 def _rsi(close: pd.Series, n: int = 14) -> pd.Series:
     delta = close.diff()
@@ -68,10 +71,9 @@ def _safe(v):
         return None
 
 
-# ── Feature engineering ─────────────────────────────────────────────────────────
+# ── Feature engineering ───────────────────────────────────────────────────────────
 
 def engineer_features(df: pd.DataFrame) -> dict | None:
-    """Compute features for one symbol. Returns None if insufficient data."""
     if df is None or len(df) < 30:
         return None
 
@@ -116,8 +118,7 @@ def engineer_features(df: pd.DataFrame) -> dict | None:
     sma200   = float(close.rolling(min(200, len(close))).mean().iloc[-1])
     dist_sma = _safe((price / sma200 - 1.0) * 100) if sma200 > 0 else None
 
-    # Time-series arrays for Chart.js
-    tail_df   = df.tail(252)
+    tail_df    = df.tail(252)
     tail_close = tail_df['close']
     dates      = [
         str(d.date()) if hasattr(d, 'date') else str(d)
@@ -140,7 +141,6 @@ def engineer_features(df: pd.DataFrame) -> dict | None:
     roc20d = _roc(20)
     roc63d = _roc(63)
 
-    # Trend score: directional aggregate of momentum + KAMA signals, range [-1, 1]
     _ts: list[float] = []
     for rv in [roc5d, roc20d]:
         if rv is not None:
@@ -174,10 +174,9 @@ def engineer_features(df: pd.DataFrame) -> dict | None:
     }
 
 
-# ── Scoring ──────────────────────────────────────────────────────────────────────
+# ── Scoring ──────────────────────────────────────────────────────────────────────────
 
 def score_and_select(features: dict[str, dict], n: int = 20) -> list[dict]:
-    """Score symbols and return top N sorted by interest."""
     scored = []
     for sym, f in features.items():
         if not f:
@@ -212,7 +211,7 @@ def score_and_select(features: dict[str, dict], n: int = 20) -> list[dict]:
     return scored[:n]
 
 
-# ── Chart config generators ──────────────────────────────────────────────────────
+# ── Chart config generators ───────────────────────────────────────────────────────────
 
 def _base_opts():
     return {
@@ -301,19 +300,6 @@ def _chart_zscore(dates, values, label='Z-Score'):
     }
 
 
-def _chart_regime(dates, values, label='Regime'):
-    colors = ['rgba(34,197,94,0.7)' if (v or 0) >= 0 else 'rgba(239,68,68,0.7)'
-              for v in values]
-    return {
-        'type': 'bar',
-        'data': {'labels': dates, 'datasets': [{
-            'label': label, 'data': values, 'backgroundColor': colors,
-            'borderWidth': 0, 'barPercentage': 1.0, 'categoryPercentage': 1.0,
-        }]},
-        'options': _base_opts(),
-    }
-
-
 def _chart_dist(values, label='Distribution', bins=25):
     arr = [float(v) for v in values if v is not None
            and not math.isnan(float(v or 0))]
@@ -337,7 +323,7 @@ def _chart_dist(values, label='Distribution', bins=25):
     }
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────────────
 
 def _build_subtitle(sym: str, f: dict, score: float) -> str:
     parts = []
@@ -432,15 +418,16 @@ def _build_card(sym: str, f: dict, score: float, color: str) -> dict:
     }
 
 
-# ── Main entry point ──────────────────────────────────────────────────────────────
+# ── Main entry point ────────────────────────────────────────────────────────────────────
 
 def compute_newsletter_data(n_charts: int = 20) -> dict:
     """Compute newsletter data for all watchlist symbols."""
     _now = time.monotonic()
-    if (_CACHE["data"] is not None and
-            _CACHE["n"] == n_charts and
-            (_now - _CACHE["ts"]) < _CACHE_TTL):
-        return _CACHE["data"]
+    with _CACHE_LOCK:
+        if (_CACHE["data"] is not None and
+                _CACHE["n"] == n_charts and
+                (_now - _CACHE["ts"]) < _CACHE_TTL):
+            return _CACHE["data"]
 
     symbols = [s['symbol'] for s in db.list_symbols()]
     if not symbols:
@@ -450,17 +437,20 @@ def compute_newsletter_data(n_charts: int = 20) -> dict:
             'error': 'No symbols in watchlist.',
         }
 
-    features: dict[str, dict | None] = {}
-    for sym in symbols:
+    def _fetch_and_compute(sym):
         df = db.get_ohlcv_df(sym, 'daily', limit=300)
-        features[sym] = None if (df.empty or len(df) < 20) else engineer_features(df)
+        return sym, (None if (df.empty or len(df) < 20) else engineer_features(df))
+
+    features: dict[str, dict | None] = {}
+    with ThreadPoolExecutor(max_workers=min(8, len(symbols))) as pool:
+        for sym, feat in pool.map(_fetch_and_compute, symbols):
+            features[sym] = feat
 
     ranked = score_and_select(
         {sym: f for sym, f in features.items() if f},
         n=n_charts,
     )
 
-    # Lead stories — top movers by 5D return magnitude
     sorted_by_roc = sorted(
         [r for r in ranked if r['features'].get('roc_5d') is not None],
         key=lambda x: abs(x['features'].get('roc_5d') or 0),
@@ -512,7 +502,8 @@ def compute_newsletter_data(n_charts: int = 20) -> dict:
         'symbol_count': len(symbols),
         'generated_at': datetime.datetime.now(datetime.timezone.utc).isoformat(),
     }
-    _CACHE["data"] = result
-    _CACHE["ts"]   = time.monotonic()
-    _CACHE["n"]    = n_charts
+    with _CACHE_LOCK:
+        _CACHE["data"] = result
+        _CACHE["ts"]   = time.monotonic()
+        _CACHE["n"]    = n_charts
     return result

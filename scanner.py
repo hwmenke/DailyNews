@@ -1,35 +1,19 @@
 """
 scanner.py — Multi-timeframe watchlist scanner.
-
-Metrics computed per symbol × (daily / weekly / monthly):
-  RSI        : rsi_7, rsi_14, rsi_21
-  KAMA ratios: p_kf_pct  — percentile rank of close/KAMA_fast
-               p_km_pct  — percentile rank of close/KAMA_medium
-               kf_km     — (KAMA_fast / KAMA_medium − 1) × 100  (cross %)
-  Momentum   : roc_1m, roc_3m, roc_6m  (rate of change)
-               bb_b      — Bollinger %B
-  Volatility : atr_pct   — ATR(14) as % of price
-  Structure  : vol_ratio — 5-bar / 20-bar avg volume
-               dist_hi   — % below lookback-period high  (0 = at high)
-               dist_sma  — % above/below 200-bar SMA
-
-Timeframe lookbacks used for percentile rank windows:
-  daily  → 252 bars   (~1 year)
-  weekly →  52 bars   (~1 year)
-  monthly→  36 bars   (~3 years)
-
-Also includes S&P 500 bulk-fetch and signal-based scanner (local features).
 """
 
+import threading
 import numpy as np
 import pandas as pd
+import requests
 import ta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import database as db
 import data_fetcher as fetcher
 
-# ── Module-level bulk-fetch status ───────────────────────────────────────────
+# ── Module-level bulk-fetch status ──────────────────────────────────────────────
+_fetch_status_lock = threading.Lock()
 _fetch_status = {
     "running":  False,
     "progress": 0,
@@ -39,10 +23,22 @@ _fetch_status = {
 }
 
 
-# ── type helpers ─────────────────────────────────────────────────────────────
+def start_fetch_if_idle() -> bool:
+    """Atomically check-and-set _fetch_status['running']. Returns True if we started."""
+    with _fetch_status_lock:
+        if _fetch_status["running"]:
+            return False
+        _fetch_status["running"] = True
+        _fetch_status["progress"] = 0
+        _fetch_status["done"] = 0
+        _fetch_status["total"] = 0
+        _fetch_status["summary"] = None
+        return True
+
+
+# ── type helpers ──────────────────────────────────────────────────────────────
 
 def _safe(v):
-    """Coerce numpy scalar → Python native; None on NaN."""
     if v is None:
         return None
     try:
@@ -58,15 +54,13 @@ def _safe(v):
 
 
 def _last(s: pd.Series):
-    """Return last non-NaN value of a Series, or None."""
     valid = s.dropna()
     return _safe(valid.iloc[-1]) if len(valid) else None
 
 
-# ── indicator implementations ─────────────────────────────────────────────────
+# ── indicator implementations ─────────────────────────────────────────────────────
 
 def _rsi(close: pd.Series, n: int) -> pd.Series:
-    """Wilder EWM RSI."""
     delta = close.diff()
     gain  = delta.clip(lower=0)
     loss  = (-delta).clip(lower=0)
@@ -78,7 +72,6 @@ def _rsi(close: pd.Series, n: int) -> pd.Series:
 
 def _kama(close: pd.Series, window: int = 10,
           fast: int = 2, slow: int = 30) -> pd.Series:
-    """Kaufman Adaptive Moving Average."""
     fast_sc = 2.0 / (fast + 1)
     slow_sc = 2.0 / (slow + 1)
     prices  = close.values.astype(float)
@@ -97,7 +90,6 @@ def _kama(close: pd.Series, window: int = 10,
 
 
 def _pct_rank(series: pd.Series, lookback: int) -> pd.Series:
-    """Rolling percentile rank: 0–100."""
     arr = series.values.astype(float)
     n   = len(arr)
     out = np.full(n, np.nan)
@@ -115,10 +107,9 @@ def _pct_rank(series: pd.Series, lookback: int) -> pd.Series:
     return pd.Series(out, index=series.index)
 
 
-# ── per-timeframe computation ─────────────────────────────────────────────────
+# ── per-timeframe computation ───────────────────────────────────────────────────
 
 def _compute_tf(df: pd.DataFrame, lookback: int):
-    """Compute all scanner metrics for one symbol × timeframe."""
     min_bars = max(22, lookback // 8)
     if df is None or len(df) < min_bars:
         return None
@@ -218,9 +209,11 @@ def _compute_tf(df: pd.DataFrame, lookback: int):
 
 def get_sp500_tickers() -> pd.DataFrame:
     """Scrape S&P 500 constituents from Wikipedia."""
-    url    = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-    tables = pd.read_html(url)
-    df     = tables[0]
+    url  = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    resp = requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+    resp.raise_for_status()
+    tables = pd.read_html(resp.text)
+    df = tables[0]
     df.columns = [c.strip() for c in df.columns]
     for col in df.columns:
         if "symbol" in col.lower() or "ticker" in col.lower():
@@ -232,18 +225,18 @@ def get_sp500_tickers() -> pd.DataFrame:
 
 def bulk_fetch_sp500(max_workers: int = 5, force_refresh: bool = False) -> dict:
     """Add all S&P 500 tickers to the DB and fetch their OHLCV data."""
-    global _fetch_status
-
     try:
         sp500_df = get_sp500_tickers()
         symbols  = sp500_df["Symbol"].tolist()
     except Exception as e:
-        _fetch_status["running"] = False
+        with _fetch_status_lock:
+            _fetch_status["running"] = False
         return {"error": f"Failed to fetch S&P 500 list: {str(e)}"}
 
-    _fetch_status["total"]    = len(symbols)
-    _fetch_status["done"]     = 0
-    _fetch_status["progress"] = 0
+    with _fetch_status_lock:
+        _fetch_status["total"]    = len(symbols)
+        _fetch_status["done"]     = 0
+        _fetch_status["progress"] = 0
 
     for sym in symbols:
         db.add_symbol(sym)
@@ -268,19 +261,20 @@ def bulk_fetch_sp500(max_workers: int = 5, force_refresh: bool = False) -> dict:
             results[status_str] += 1
             if err:
                 results["errors"].append({"symbol": sym, "error": err})
-            _fetch_status["done"] += 1
-            total = _fetch_status["total"] or 1
-            _fetch_status["progress"] = round(_fetch_status["done"] / total * 100, 1)
+            with _fetch_status_lock:
+                _fetch_status["done"] += 1
+                total = _fetch_status["total"] or 1
+                _fetch_status["progress"] = round(_fetch_status["done"] / total * 100, 1)
 
-    _fetch_status["running"] = False
-    _fetch_status["summary"] = results
+    with _fetch_status_lock:
+        _fetch_status["running"] = False
+        _fetch_status["summary"] = results
     return results
 
 
-# ── Signal-based scanner (local) ──────────────────────────────────────────────
+# ── Signal-based scanner (local) ──────────────────────────────────────────────────
 
 def _scan_one(sym: str):
-    """Compute scanner signals for a single symbol using DB data only."""
     df = db.get_ohlcv_df(sym, "daily", limit=300)
     if df.empty or len(df) < 60:
         return None
@@ -388,7 +382,6 @@ def _scan_one(sym: str):
 
 
 def run_scanner(symbols: list = None, signal_filter: str = None) -> list:
-    """Run _scan_one for all symbols in DB (or a provided list)."""
     if symbols is None:
         symbols = [s["symbol"] for s in db.list_symbols()]
 
@@ -410,7 +403,7 @@ def run_scanner(symbols: list = None, signal_filter: str = None) -> list:
     return results
 
 
-# ── Monthly resampler ─────────────────────────────────────────────────────────
+# ── Monthly resampler ──────────────────────────────────────────────────────────────
 
 def _to_monthly(df: pd.DataFrame) -> pd.DataFrame:
     if df is None or df.empty:
@@ -424,23 +417,22 @@ def _to_monthly(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame()
 
 
-# ── Multi-timeframe scanner ───────────────────────────────────────────────────
+# ── Multi-timeframe scanner (parallelised) ───────────────────────────────────────
 
 def compute_scanner(symbols: list) -> list:
     """Compute D/W/M scanner metrics for every symbol in the list."""
-    results = []
-    for sym in symbols:
+
+    def _one(sym):
         try:
             d_df = db.get_ohlcv_df(sym, 'daily',  limit=600)
             w_df = db.get_ohlcv_df(sym, 'weekly', limit=200)
 
             if d_df.empty:
-                results.append({
+                return {
                     'symbol': sym, 'error': 'No data — fetch first',
                     'price': None, 'chg': None,
                     'd': None, 'w': None, 'm': None,
-                })
-                continue
+                }
 
             price = _safe(d_df['close'].iloc[-1])
             prev  = _safe(d_df['close'].iloc[-2]) if len(d_df) > 1 else None
@@ -457,19 +449,20 @@ def compute_scanner(symbols: list) -> list:
                 except Exception:
                     return None
 
-            results.append({
+            return {
                 'symbol': sym,
                 'price':  price,
                 'chg':    chg,
                 'd':      _safe_tf(d_df, 252),
                 'w':      _safe_tf(w_df, 52),
                 'm':      _safe_tf(m_df, 36),
-            })
+            }
         except Exception as e:
-            results.append({
+            return {
                 'symbol': sym, 'error': str(e),
                 'price': None, 'chg': None,
                 'd': None, 'w': None, 'm': None,
-            })
+            }
 
-    return results
+    with ThreadPoolExecutor(max_workers=min(8, len(symbols) or 1)) as pool:
+        return list(pool.map(_one, symbols))

@@ -30,7 +30,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, static_folder=".", static_url_path="")
-CORS(app)
+_cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:8050").split(",")]
+CORS(app, origins=_cors_origins)
 
 # Initialise the database on startup
 db.init_db()
@@ -230,9 +231,13 @@ def trend_scan():
     import concurrent.futures
     from scanner import _kama as kama_fn, _rsi as rsi_fn
 
-    freq       = request.args.get("freq",   "daily")
-    method     = request.args.get("method", "kama")
-    rsi_period = int(request.args.get("rsi_period", 14))
+    freq   = request.args.get("freq",   "daily")
+    method = request.args.get("method", "kama")
+    try:
+        rsi_period = int(request.args.get("rsi_period", 14))
+    except (TypeError, ValueError):
+        rsi_period = 14
+
     symbols    = [s["symbol"] for s in db.list_symbols()]
     if not symbols:
         return jsonify([])
@@ -337,21 +342,19 @@ def get_sp500():
 def fetch_sp500():
     force = request.get_json(force=True, silent=True) or {}
     force_refresh = force.get("force", False)
-    if scanner._fetch_status["running"]:
+    if not scanner.start_fetch_if_idle():
         return jsonify({"message": "Fetch already running", "status": scanner._fetch_status})
     import threading
     def _run():
-        scanner._fetch_status["running"] = True
-        result = scanner.bulk_fetch_sp500(max_workers=5, force_refresh=force_refresh)
-        scanner._fetch_status["running"] = False
-        scanner._fetch_status["summary"] = result
+        scanner.bulk_fetch_sp500(max_workers=5, force_refresh=force_refresh)
     threading.Thread(target=_run, daemon=True).start()
     return jsonify({"message": "S&P 500 fetch started"})
 
 
 @app.route("/api/scanner/status")
 def scanner_status():
-    return jsonify(scanner._fetch_status)
+    with scanner._fetch_status_lock:
+        return jsonify(dict(scanner._fetch_status))
 
 
 @app.route("/api/scanner/run")
@@ -378,20 +381,15 @@ def get_scanner():
 
 @app.route("/api/data-manager/ticker-lists", methods=["GET"])
 def get_ticker_lists():
-    """Return the curated ticker library (categories + tickers)."""
     return jsonify(tl.TICKER_LIBRARY)
 
 
 @app.route("/api/data-manager/fetch-batch", methods=["POST"])
 def fetch_batch():
     """
-    SSE streaming endpoint.
-    POST body: {
-        "tickers":      ["AAPL", ...],
-        "start_date":   "2000-01-01",
-        "delay":        1.5,
-        "add_watchlist": true
-    }
+    SSE streaming endpoint. Bind to 127.0.0.1 in production to prevent
+    unauthenticated external access (set HOST env var).
+    POST body: {"tickers": [...], "start_date": "2000-01-01", "delay": 1.5, "add_watchlist": true}
     """
     body        = request.get_json(force=True) or {}
     tickers     = [t.strip().upper() for t in body.get("tickers", []) if t.strip()]
@@ -474,5 +472,7 @@ def get_newsletter_data():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8050))
-    logger.info("Financial Dashboard running at http://localhost:%s", port)
-    app.run(debug=os.environ.get("DEBUG", "false").lower() == "true", threaded=True, port=port)
+    host = os.environ.get("HOST", "127.0.0.1")
+    logger.info("Financial Dashboard running at http://%s:%s", host, port)
+    app.run(debug=os.environ.get("DEBUG", "false").lower() == "true",
+            threaded=True, host=host, port=port)
