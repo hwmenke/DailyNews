@@ -34,7 +34,7 @@ function toast(message, type = 'info', duration = 3500) {
     }, duration);
 }
 
-// ── API helpers ──────────────────────────────────────────
+// ── API helpers ──────────────────────────────────────────────
 async function apiFetch(url, opts = {}) {
     console.log(`>> API Fetch: ${url}`, opts.method || 'GET');
     const res  = await fetch(url, opts);
@@ -47,7 +47,7 @@ async function apiFetch(url, opts = {}) {
     return data;
 }
 
-// ── Clock ──────────────────────────────────────────────────
+// ── Clock ────────────────────────────────────────────────────
 function startClock() {
     const el   = document.getElementById('market-time');
     const tick = () => {
@@ -61,7 +61,7 @@ function startClock() {
     setInterval(tick, 1000);
 }
 
-// ── KAMA period pills ───────────────────────────────────────────
+// ── KAMA period pills ──────────────────────────────────────────────────
 function kamaApiParam() {
     return Object.keys(kamaPeriods).join(',') || '10';
 }
@@ -141,7 +141,7 @@ function setupKamaAddForm() {
     input.addEventListener('keydown', e => { if (e.key === 'Enter') addPeriod(); });
 }
 
-// ── Sidebar toggle ────────────────────────────────────────────
+// ── Sidebar toggle ────────────────────────────────────────────────
 function toggleSidebar() {
     const app = document.querySelector('.app');
     const btn = document.getElementById('btn-sidebar-toggle');
@@ -150,7 +150,7 @@ function toggleSidebar() {
     if (btn) btn.textContent = collapsed ? '▶' : '☰';
 }
 
-// ── Symbol Watchlist ─────────────────────────────────────────
+// ── Symbol Watchlist ───────────────────────────────────────────────
 async function loadSymbols() {
     try {
         state.symbols = await apiFetch(`${API}/symbols`);
@@ -295,7 +295,7 @@ async function removeSymbol(symbol) {
     }
 }
 
-// ── Yahoo Finance fetch ─────────────────────────────────────────
+// ── Yahoo Finance fetch ───────────────────────────────────────────────
 async function fetchSymbolData(symbol, silent = false) {
     console.log(`[App] Fetching data for ${symbol}...`);
     if (!silent) toast(`Downloading ${symbol} from Yahoo Finance…`, 'info', 5000);
@@ -311,7 +311,7 @@ async function fetchSymbolData(symbol, silent = false) {
     }
 }
 
-// ── Bulk Import ───────────────────────────────────────────────
+// ── Bulk Import ───────────────────────────────────────────────────
 function openBulkModal() {
     const modal = document.getElementById('bulk-modal');
     modal.style.display = 'flex';
@@ -434,7 +434,7 @@ async function refreshAll() {
     }
 }
 
-// ── Symbol selection & chart loading ─────────────────────────
+// ── Symbol selection & chart loading ─────────────────────────────────
 async function selectSymbol(symbol) {
     state.activeSymbol = symbol;
     renderSymbolList();
@@ -540,7 +540,7 @@ async function loadChartData(symbol) {
     }
 }
 
-// ── Adaptive Trend loading ────────────────────────────────────
+// ── Adaptive Trend loading ──────────────────────────────────────────
 async function loadAdaptiveTrendData(symbol) {
     if (!symbol) return;
     showTrendArea();
@@ -588,7 +588,7 @@ async function loadAdaptiveTrendData(symbol) {
     }
 }
 
-// ── UI helpers ───────────────────────────────────────────────
+// ── UI helpers ────────────────────────────────────────────────────
 function showEmptyState() {
     document.getElementById('empty-state').style.display       = 'flex';
     document.getElementById('chart-area').style.display        = 'none';
@@ -598,22 +598,17 @@ function showEmptyState() {
     document.getElementById('data-manager-area').style.display = 'none';
 }
 
-function showChartArea() {
-    document.getElementById('empty-state').style.display = 'none';
-    document.getElementById('chart-area').style.display  = 'flex';
-}
-
 function showLoadingOverlay(show) {
     document.getElementById('chart-loading').style.display = show ? 'flex' : 'none';
 }
 
-// ── Tab Registry ──────────────────────────────────────────────
+// ── Tab Registry ──────────────────────────────────────────────────────
 const _tabRegistry = {};
 window.registerTab = function(id, { onShow, onHide } = {}) {
     _tabRegistry[id] = { onShow, onHide };
 };
 
-// ── Tab Switching ──────────────────────────────────────────────
+// ── Tab Switching ────────────────────────────────────────────────────
 async function switchTab(tabId) {
     state.activeTab = tabId;
 
@@ -723,7 +718,7 @@ function showDataManagerArea() {
     document.querySelector('.tab-bar').style.display           = 'none';
 }
 
-// ── Stats Rendering ───────────────────────────────────────────
+// ── Stats Rendering ───────────────────────────────────────────────────
 function renderStats(data) {
     const m = data.metrics;
     
@@ -899,7 +894,7 @@ function updateSymbolHeader(symbol, last, prev) {
     set('ohlcv-volume', fmtVol(last.volume));
 }
 
-// ── KNN Functions ──────────────────────────────────────────────
+// ── KNN Functions ────────────────────────────────────────────────────
 async function loadKNN(symbol) {
     document.getElementById('knn-loading').style.display = 'flex';
     try {
@@ -963,7 +958,7 @@ function renderKNN(data) {
     }
 }
 
-// ── Backtest Functions ───────────────────────────────────────────
+// ── Backtest Functions ───────────────────────────────────────────────────
 async function loadBacktest(symbol) {
     const statusEl = document.getElementById('backtest-status');
     const btn      = document.getElementById('btn-run-backtest');
@@ -1029,7 +1024,7 @@ function renderBacktest(data) {
     }
 }
 
-// ── Scanner Functions ───────────────────────────────────────────
+// ── Scanner Functions ───────────────────────────────────────────────────
 async function fetchSP500() {
     const btn      = document.getElementById('btn-fetch-sp500');
     const statusEl = document.getElementById('scanner-fetch-status');
@@ -1093,7 +1088,7 @@ async function runScanner() {
     }
 }
 
-// ── Boot ──────────────────────────────────────────────────────
+// ── Boot ──────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
     startClock();
 

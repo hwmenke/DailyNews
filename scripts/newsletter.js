@@ -5,6 +5,15 @@
     let _rawData = null;
     let _view    = 'grid';
     let _filter  = 'all';
+    let _chartInstances = [];
+
+    // ── Chart instance cleanup ─────────────────────────────────
+    function _destroyAllCharts() {
+        _chartInstances.forEach(function (ch) {
+            try { ch.destroy(); } catch (_) {}
+        });
+        _chartInstances = [];
+    }
 
     // ── Tab registration (preferred) with monkey-patch fallback ──
     document.addEventListener('DOMContentLoaded', function () {
@@ -23,12 +32,9 @@
                     if (area) area.style.display = 'flex';
                     if (!_loaded) { _loaded = true; loadNewsletterData(); }
                 },
-                onHide: function () {
-                    // nothing to clean up
-                }
+                onHide: function () {}
             });
         } else {
-            // fallback: monkey-patch switchTab as safety net
             var _orig = window.switchTab;
             window.switchTab = async function (tabId) {
                 var area = document.getElementById('daily-edge-area');
@@ -77,9 +83,13 @@
         }
     }
 
-    // ── Filter / sort / render ───────────────────────────────
+    // ── Filter / sort / render ──────────────────────────────────
     function _applyFilters() {
         if (!_rawData) return;
+
+        // Destroy all previous Chart.js instances before re-rendering
+        _destroyAllCharts();
+
         var sortSel = document.getElementById('nl-sort-select');
         var sortKey = sortSel ? sortSel.value : 'score';
 
@@ -89,7 +99,6 @@
             return true;
         };
 
-        // Sort using top-level card fields (not item.features which doesn't exist)
         var sortFn = function (a, b) {
             if (sortKey === 'momentum') return (b.roc_5d || 0) - (a.roc_5d || 0);
             if (sortKey === 'volume')   return (b.vol_ratio || 0) - (a.vol_ratio || 0);
@@ -106,9 +115,9 @@
         if (lc) lc.textContent = leads.length;
         if (cc) cc.textContent = cards.length;
 
-        var tableEl  = document.getElementById('nl-table-view');
+        var tableEl   = document.getElementById('nl-table-view');
         var storiesEl = document.getElementById('nl-lead-stories');
-        var gridEl   = document.getElementById('nl-card-grid');
+        var gridEl    = document.getElementById('nl-card-grid');
 
         if (_view === 'table') {
             if (storiesEl) storiesEl.style.display = 'none';
@@ -124,7 +133,7 @@
         }
     }
 
-    // ── Lead stories ─────────────────────────────────────────
+    // ── Lead stories ────────────────────────────────────────────
     function _renderLeads(stories) {
         var container = document.getElementById('nl-lead-stories');
         if (!container) return;
@@ -152,12 +161,17 @@
             card.querySelector('.nl-lead-sym').addEventListener('click', function () {
                 if (typeof selectSymbol === 'function') selectSymbol(s.symbol);
             });
-            if (s.chart) { try { new Chart(card.querySelector('.nl-chart-canvas'), s.chart); } catch (_) {} }
+            if (s.chart) {
+                try {
+                    var ch = new Chart(card.querySelector('.nl-chart-canvas'), s.chart);
+                    _chartInstances.push(ch);
+                } catch (_) {}
+            }
             container.appendChild(card);
         });
     }
 
-    // ── Card grid ─────────────────────────────────────────────
+    // ── Card grid ───────────────────────────────────────────────
     function _renderCards(cards) {
         var grid = document.getElementById('nl-card-grid');
         if (!grid) return;
@@ -185,7 +199,10 @@
                 var canvas = document.createElement('canvas');
                 wrap.appendChild(canvas);
                 card.appendChild(wrap);
-                try { new Chart(canvas, c.chart); } catch (_) {}
+                try {
+                    var ch = new Chart(canvas, c.chart);
+                    _chartInstances.push(ch);
+                } catch (_) {}
             }
             var metricsDiv = document.createElement('div');
             metricsDiv.className = 'nl-metrics-row';
@@ -198,7 +215,7 @@
         });
     }
 
-    // ── Table view ───────────────────────────────────────────
+    // ── Table view ──────────────────────────────────────────────
     function _renderTable(items) {
         var tableEl = document.getElementById('nl-table-view');
         if (!tableEl) return;
@@ -218,7 +235,6 @@
             var m        = item.metrics || {};
             var scoreVal = item.score || 0;
             var regime   = _regime(item);
-            // kama10 in metrics is already the % distance from KAMA10
             var k10pct   = m.kama10 != null
                 ? (m.kama10 >= 0 ? '+' : '') + (+m.kama10).toFixed(1) + '%' : '—';
             var cells = {
@@ -243,9 +259,8 @@
         });
     }
 
-    // ── Helpers ──────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────
     function _regime(item) {
-        // trend_score is at the top level of the card/lead object
         var ts = item.trend_score;
         if (ts >  0) return { label: 'LONG',    cls: 'bull' };
         if (ts <  0) return { label: 'SHORT',   cls: 'bear' };
@@ -261,11 +276,9 @@
     function _metricsHtml(item, large) {
         var m   = item.metrics || {};
         var fmt = function (v, d) { return v != null ? (+v).toFixed(d != null ? d : 1) : '—'; };
-        // Values are already in percent — do NOT multiply by 100
         var pct = function (v) { return v != null ? (v >= 0 ? '+' : '') + (+v).toFixed(1) + '%' : '—'; };
         var cls = function (v) { return v != null && +v >= 0 ? 'nl-pos' : 'nl-neg'; };
         var rsiCls = function (v) { if (v == null) return ''; return v < 35 ? 'nl-pos' : v > 65 ? 'nl-neg' : ''; };
-        // kama10 in metrics is already the % distance
         var k10pct = m.kama10 != null ? (m.kama10 >= 0 ? '+' : '') + (+m.kama10).toFixed(1) + '%' : '—';
         var k10cls = m.kama10 != null ? (m.kama10 >= 0 ? 'nl-pos' : 'nl-neg') : '';
         var fields = [
@@ -285,7 +298,7 @@
         }).join('');
     }
 
-    // ── Public API ───────────────────────────────────────────
+    // ── Public API ──────────────────────────────────────────────
     window.nlRefresh = function () {
         _loaded = false; _rawData = null;
         loadNewsletterData();

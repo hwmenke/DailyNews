@@ -21,13 +21,18 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install ruff pytest
+          pip install ruff
 
-      - name: Lint with ruff
+      - name: Lint with ruff (syntax + undefined names only)
         run: ruff check .
 
       - name: Run tests
         env:
           FLASK_ENV: testing
-        run: pytest tests/ -q --tb=short || echo "No tests yet — skipping"
+        run: |
+          if [ -d tests ]; then
+            pip install pytest
+            pytest tests/ -q --tb=short
+          else
+            echo "No tests directory found — skipping"
+          fi
