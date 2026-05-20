@@ -80,10 +80,6 @@ def _prep(series: pd.Series, lookback: int) -> tuple[list[str], list[float]]:
 
 # ── Chart type 1: line with ±1σ context band ────────────────────────────────────
 def line_with_context_band(series: pd.Series, ctx: dict, lookback: int = 126) -> dict:
-    """
-    Line chart with ±1σ band shaded from the 1Y mean.
-    Band provides at-a-glance context: is the current level unusual?
-    """
     labels, values = _prep(series, lookback)
     n = len(values)
 
@@ -94,7 +90,6 @@ def line_with_context_band(series: pd.Series, ctx: dict, lookback: int = 126) ->
     lower = [round(mean_1y - std_1y, 6)] * n
     mean  = [round(mean_1y, 6)] * n
 
-    # Colour last dot by today’s direction
     chg = ctx.get("daily_chg", 0) or 0
     pt_colors = ["transparent"] * n
     pt_radii  = [0] * n
@@ -108,19 +103,15 @@ def line_with_context_band(series: pd.Series, ctx: dict, lookback: int = 126) ->
         "data": {
             "labels": labels,
             "datasets": [
-                # Upper band → fill to lower band (dataset index +1)
                 {"data": upper,  "borderColor": "transparent",
                  "backgroundColor": "rgba(24,95,165,0.09)",
                  "fill": "+1", "pointRadius": 0, "order": 3},
-                # Lower band
                 {"data": lower,  "borderColor": "transparent",
                  "backgroundColor": "transparent",
                  "fill": False,  "pointRadius": 0, "order": 4},
-                # 1Y mean dashed reference
                 {"data": mean,   "borderColor": "rgba(136,135,128,0.45)",
                  "borderWidth": 1, "borderDash": [4, 4],
                  "fill": False,  "pointRadius": 0, "order": 2},
-                # Main price line
                 {"data": values, "borderColor": PRIMARY_BLUE, "borderWidth": 1.75,
                  "backgroundColor": "transparent",
                  "fill": False,
@@ -135,12 +126,6 @@ def line_with_context_band(series: pd.Series, ctx: dict, lookback: int = 126) ->
 
 # ── Chart type 2: line with percentile-keyed fill ───────────────────────────────
 def line_with_percentile_fill(series: pd.Series, ctx: dict, lookback: int = 126) -> dict:
-    """
-    Area chart whose fill colour signals the 3Y percentile regime:
-    - Red fill: top 10% (stretched / overbought)
-    - Blue fill: bottom 10% (compressed / oversold)
-    - Gray fill: neutral range
-    """
     labels, values = _prep(series, lookback)
     pct3y = ctx.get("pct_rank_3y", 50) or 50
 
@@ -171,10 +156,6 @@ def line_with_percentile_fill(series: pd.Series, ctx: dict, lookback: int = 126)
 # ── Chart type 3: return bars ────────────────────────────────────────────────────────────
 def bar_chart_returns(series: pd.Series, ctx: dict,
                       lookback: int = 63, freq: str = "daily") -> dict:
-    """
-    Daily return bars, green/red. Yesterday’s bar is outlined darker.
-    Annotation lines at mean and ±1σ of historical return distribution.
-    """
     s = series.dropna()
     if freq == "weekly":
         s = s.resample("W-FRI").last().dropna()
@@ -233,12 +214,8 @@ def bar_chart_returns(series: pd.Series, ctx: dict,
 
 
 # ── Chart type 4: distribution chart ───────────────────────────────────────────────────
-ndef distribution_chart(series: pd.Series, ctx: dict,
+def distribution_chart(series: pd.Series, ctx: dict,
                         bins: int = 36, window: int = 756) -> dict:
-    """
-    Histogram of daily moves over the trailing window.
-    Today’s bin highlighted in coral; vertical lines at ±1σ and ±2σ.
-    """
     s     = series.dropna()
     moves = s.diff().dropna().iloc[-window:]
     chg   = ctx.get("daily_chg", 0) or 0
@@ -285,10 +262,6 @@ ndef distribution_chart(series: pd.Series, ctx: dict,
 # ── Chart type 5: multi-line indexed to 100 ─────────────────────────────────────────────
 def multi_line_indexed(series_dict: dict[str, pd.Series],
                        base_date: str | None = None) -> dict:
-    """
-    All series indexed to 100 at the earliest common date (or base_date).
-    Useful for comparing relative performance across asset classes.
-    """
     df = pd.DataFrame(series_dict).dropna(how="all")
     if df.empty:
         return {"type": "line", "data": {"labels": [], "datasets": []}, "options": _base_opts()}
@@ -324,10 +297,6 @@ def yield_curve_snapshot(tenors: list[str],
                           today: list[float],
                           one_month_ago: list[float],
                           one_year_ago: list[float]) -> dict:
-    """
-    Three-line yield curve: today (blue/thick), 1M ago (gray), 1Y ago (coral/dashed).
-    Immediately shows bull/bear steepening and flattening dynamics.
-    """
     def _clean(lst):
         return [round(v, 4) if v is not None else None for v in lst]
 
@@ -361,18 +330,12 @@ def yield_curve_snapshot(tenors: list[str],
 
 # ── Chart type 7: MA regime chart ───────────────────────────────────────────────────────────
 def regime_chart(series: pd.Series, ctx: dict, lookback: int = 504) -> dict:
-    """
-    Price line with background shading keyed to 200dMA regime.
-    Green tint = above 200dMA; red tint = below.
-    200dMA shown as separate gray dashed overlay.
-    """
     s     = series.dropna().iloc[-lookback:]
     ma200 = s.rolling(200).mean()
     labels  = [d.strftime("%b '%y") if hasattr(d, "strftime") else str(d) for d in s.index]
     vals    = [round(float(v), 6) for v in s.values]
     ma_vals = [round(float(v), 6) if pd.notna(v) else None for v in ma200.values]
 
-    # Build annotation boxes for regime segments
     anns: dict = {}
     n = len(labels)
     i = 0
@@ -417,12 +380,6 @@ def regime_chart(series: pd.Series, ctx: dict, lookback: int = 504) -> dict:
 
 # ── Chart type 8: rolling z-score ──────────────────────────────────────────────────────────
 def rolling_zscore_chart(series: pd.Series, ctx: dict, window: int = 252) -> dict:
-    """
-    Rolling z-score of the price/rate level over a trailing window.
-    Makes trend exhaustion and mean-reversion setups immediately visible.
-    Fill colour keyed to extremes: red >+2σ, blue <-2σ.
-    Reference lines at ±1, ±2, ±3 standard deviations.
-    """
     s = series.dropna()
     roll_mean = s.rolling(window).mean()
     roll_std  = s.rolling(window).std()
