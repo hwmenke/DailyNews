@@ -4,7 +4,6 @@ knn_model.py - KNN Lookalike Engine
 
 import numpy as np
 import pandas as pd
-import ta
 import database as db
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import NearestNeighbors
@@ -50,16 +49,22 @@ def compute_knn_lookalike(symbol: str, k: int = 15) -> dict:
     low   = df["low"]
     vol   = df["volume"]
 
-    df["rsi14"] = ta.momentum.RSIIndicator(close, window=14).rsi()
+    _delta = close.diff()
+    df["rsi14"] = (100.0 - 100.0 / (1.0 + _delta.clip(lower=0).ewm(alpha=1.0/14, adjust=False).mean()
+                  / (-_delta).clip(lower=0).ewm(alpha=1.0/14, adjust=False).mean().replace(0, np.nan)))
 
     ret_1d = close.pct_change()
     df["vol20_ann"] = ret_1d.rolling(20).std() * np.sqrt(252)
 
-    macd_ind     = ta.trend.MACD(close, window_slow=26, window_fast=12, window_sign=9)
-    df["macd_hist"] = macd_ind.macd_diff()
+    _ema12    = close.ewm(span=12, adjust=False).mean()
+    _ema26    = close.ewm(span=26, adjust=False).mean()
+    _macd     = _ema12 - _ema26
+    df["macd_hist"] = _macd - _macd.ewm(span=9, adjust=False).mean()
 
-    cci_ind  = ta.trend.CCIIndicator(high, low, close, window=20)
-    df["cci_norm"] = cci_ind.cci() / 200.0
+    _hlc3  = (high + low + close) / 3.0
+    _sma20 = _hlc3.rolling(20).mean()
+    _mad20 = _hlc3.rolling(20).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True)
+    df["cci_norm"] = (_hlc3 - _sma20) / (0.015 * _mad20.replace(0, np.nan)) / 200.0
 
     vol_ma20 = vol.rolling(20).mean()
     df["vol_ratio"] = vol / vol_ma20.replace(0, np.nan)

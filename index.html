@@ -16,7 +16,7 @@
 
   <!-- TOP BAR -->
   <header class="topbar">
-    <button id="btn-sidebar-toggle" class="btn-sidebar-toggle" onclick="toggleSidebar()" title="Toggle watchlist">☰</button>
+    <button id="btn-sidebar-toggle" class="btn-sidebar-toggle" title="Toggle watchlist">☰</button>
     <div class="topbar-spacer"></div>
     <div class="status-dot" title="Connected"></div>
     <span id="market-time" class="market-time">--</span>
@@ -63,14 +63,14 @@
 
     <!-- MAIN TABS -->
     <nav class="main-nav-tabs">
-      <button id="tab-charts"       class="tab-btn active" onclick="switchTab('charts')"><span class="tab-icon">📈</span> Charts</button>
-      <button id="tab-stats"        class="tab-btn"        onclick="switchTab('stats')"><span class="tab-icon">📊</span> Statistics</button>
-      <button id="tab-knn"          class="tab-btn"        onclick="switchTab('knn')"><span class="tab-icon">🤖</span> KNN Lookalike</button>
-      <button id="tab-backtest"     class="tab-btn"        onclick="switchTab('backtest')"><span class="tab-icon">⚙️</span> Backtest</button>
-      <button id="tab-trend"        class="tab-btn"        onclick="switchTab('trend')"><span class="tab-icon">🎯</span> Adaptive Trend</button>
-      <button id="tab-scanner"      class="tab-btn"        onclick="switchTab('scanner')"><span class="tab-icon">📡</span> Scanner</button>
-      <button id="tab-data-manager" class="tab-btn"        onclick="switchTab('data-manager')"><span class="tab-icon">🗄️</span> Data Manager</button>
-      <button id="tab-daily-edge"   class="tab-btn"        onclick="switchTab('daily-edge')"><span class="tab-icon">📰</span> Daily Edge</button>
+      <button id="tab-charts"       class="tab-btn active"><span class="tab-icon">📈</span> Charts</button>
+      <button id="tab-stats"        class="tab-btn"       ><span class="tab-icon">📊</span> Statistics</button>
+      <button id="tab-knn"          class="tab-btn"       ><span class="tab-icon">🤖</span> KNN Lookalike</button>
+      <button id="tab-backtest"     class="tab-btn"       ><span class="tab-icon">⚙️</span> Backtest</button>
+      <button id="tab-trend"        class="tab-btn"       ><span class="tab-icon">🎯</span> Adaptive Trend</button>
+      <button id="tab-scanner"      class="tab-btn"       ><span class="tab-icon">📡</span> Scanner</button>
+      <button id="tab-data-manager" class="tab-btn"       ><span class="tab-icon">🗄️</span> Data Manager</button>
+      <button id="tab-daily-edge"   class="tab-btn"       ><span class="tab-icon">📰</span> Daily Edge</button>
     </nav>
     <div class="tab-bar">
       <div class="indicator-toggles">
@@ -178,12 +178,12 @@
     <div id="trend-area" class="trend-container" style="display:none;">
       <div id="trend-loading" class="chart-loading" style="display:none;"><span class="spinner"></span> Computing adaptive trend…</div>
       <div class="trend-subtabs">
-        <button class="trend-stab trend-stab-active" id="trend-stab-chart" onclick="switchTrendTab('chart')">&#x1F4C8; Chart</button>
-        <button class="trend-stab" id="trend-stab-scan" onclick="switchTrendTab('scan')">&#x1F4E1; Scan Watchlist</button>
+        <button class="trend-stab trend-stab-active" id="trend-stab-chart">&#x1F4C8; Chart</button>
+        <button class="trend-stab" id="trend-stab-scan">&#x1F4E1; Scan Watchlist</button>
         <div class="trend-controls-group" style="margin-left:auto; padding:0 8px; display:flex; align-items:center; gap:6px;">
           <span class="overlay-section-label">Method</span>
-          <button class="ind-pill trend-active trend-method-btn" data-val="kama" onclick="setTrendMethod('kama')">KAMA</button>
-          <button class="ind-pill trend-method-btn" data-val="adma" onclick="setTrendMethod('adma')">ADMA</button>
+          <button class="ind-pill trend-active trend-method-btn" data-val="kama">KAMA</button>
+          <button class="ind-pill trend-method-btn" data-val="adma">ADMA</button>
         </div>
       </div>
       <div id="trend-config-panel" class="trend-config-row"></div>
@@ -191,22 +191,22 @@
         <div class="trend-controls">
           <div class="trend-controls-group">
             <span class="overlay-section-label">Freq</span>
-            <button class="ind-pill trend-active trend-freq-btn" data-val="daily" onclick="setTrendFreq('daily')">Daily</button>
-            <button class="ind-pill trend-freq-btn" data-val="weekly" onclick="setTrendFreq('weekly')">Weekly</button>
+            <button class="ind-pill trend-active trend-freq-btn" data-val="daily">Daily</button>
+            <button class="ind-pill trend-freq-btn" data-val="weekly">Weekly</button>
           </div>
           <div class="trend-controls-group">
             <span class="overlay-section-label">Baselines</span>
-            <button id="trend-toggle-sb" class="ind-pill trend-line-btn trend-toggle-on" onclick="toggleTrendLine('sb')" onmouseenter="showLineDesc('sb')" onmouseleave="clearLineDesc()"><span class="trend-dot" style="--dot:#3b82f6"></span>SB</button>
-            <button id="trend-toggle-mb" class="ind-pill trend-line-btn trend-toggle-on" onclick="toggleTrendLine('mb')" onmouseenter="showLineDesc('mb')" onmouseleave="clearLineDesc()"><span class="trend-dot" style="--dot:#ef4444"></span>MB</button>
-            <button id="trend-toggle-lb" class="ind-pill trend-line-btn trend-toggle-on" onclick="toggleTrendLine('lb')" onmouseenter="showLineDesc('lb')" onmouseleave="clearLineDesc()"><span class="trend-dot" style="--dot:#eab308"></span>LB</button>
+            <button id="trend-toggle-sb" class="ind-pill trend-line-btn trend-toggle-on"><span class="trend-dot" style="--dot:#3b82f6"></span>SB</button>
+            <button id="trend-toggle-mb" class="ind-pill trend-line-btn trend-toggle-on"><span class="trend-dot" style="--dot:#ef4444"></span>MB</button>
+            <button id="trend-toggle-lb" class="ind-pill trend-line-btn trend-toggle-on"><span class="trend-dot" style="--dot:#eab308"></span>LB</button>
           </div>
           <div class="trend-controls-group">
             <span class="overlay-section-label">Bands</span>
-            <button id="trend-toggle-sdb" class="ind-pill trend-line-btn trend-toggle-on" onclick="toggleTrendLine('sdb')" onmouseenter="showLineDesc('sdb')" onmouseleave="clearLineDesc()"><span class="trend-dot trend-dot-dash" style="--dot:#22c55e"></span>SDB</button>
-            <button id="trend-toggle-mrt" class="ind-pill trend-line-btn trend-toggle-on" onclick="toggleTrendLine('mrt')" onmouseenter="showLineDesc('mrt')" onmouseleave="clearLineDesc()"><span class="trend-dot trend-dot-dash" style="--dot:#475569"></span>MRT</button>
-            <button id="trend-toggle-mdb" class="ind-pill trend-line-btn trend-toggle-on" onclick="toggleTrendLine('mdb')" onmouseenter="showLineDesc('mdb')" onmouseleave="clearLineDesc()"><span class="trend-dot trend-dot-dash" style="--dot:#16a34a"></span>MDB</button>
-            <button id="trend-toggle-lrt" class="ind-pill trend-line-btn trend-toggle-on" onclick="toggleTrendLine('lrt')" onmouseenter="showLineDesc('lrt')" onmouseleave="clearLineDesc()"><span class="trend-dot trend-dot-dash" style="--dot:#6b7280"></span>LRT</button>
-            <button id="trend-toggle-ldb" class="ind-pill trend-line-btn trend-toggle-on" onclick="toggleTrendLine('ldb')" onmouseenter="showLineDesc('ldb')" onmouseleave="clearLineDesc()"><span class="trend-dot trend-dot-dash" style="--dot:#06b6d4"></span>LDB</button>
+            <button id="trend-toggle-sdb" class="ind-pill trend-line-btn trend-toggle-on"><span class="trend-dot trend-dot-dash" style="--dot:#22c55e"></span>SDB</button>
+            <button id="trend-toggle-mrt" class="ind-pill trend-line-btn trend-toggle-on"><span class="trend-dot trend-dot-dash" style="--dot:#475569"></span>MRT</button>
+            <button id="trend-toggle-mdb" class="ind-pill trend-line-btn trend-toggle-on"><span class="trend-dot trend-dot-dash" style="--dot:#16a34a"></span>MDB</button>
+            <button id="trend-toggle-lrt" class="ind-pill trend-line-btn trend-toggle-on"><span class="trend-dot trend-dot-dash" style="--dot:#6b7280"></span>LRT</button>
+            <button id="trend-toggle-ldb" class="ind-pill trend-line-btn trend-toggle-on"><span class="trend-dot trend-dot-dash" style="--dot:#06b6d4"></span>LDB</button>
           </div>
         </div>
         <div id="trend-line-desc" class="trend-line-desc"></div>
@@ -241,11 +241,11 @@
       </div>
       <div id="trend-scan-panel" style="display:none; flex-direction:column; height:100%; overflow:hidden;">
         <div class="trend-scan-controls">
-          <button class="btn btn-primary" id="btn-trend-scan" onclick="loadTrendScan()">⟳ Scan Watchlist</button>
+          <button class="btn btn-primary" id="btn-trend-scan">⟳ Scan Watchlist</button>
           <div class="trend-controls-group">
             <span class="overlay-section-label">Freq</span>
-            <button class="ind-pill trend-active trend-scan-freq-btn" data-val="daily" onclick="setTrendScanFreq('daily')">Daily</button>
-            <button class="ind-pill trend-scan-freq-btn" data-val="weekly" onclick="setTrendScanFreq('weekly')">Weekly</button>
+            <button class="ind-pill trend-active trend-scan-freq-btn" data-val="daily">Daily</button>
+            <button class="ind-pill trend-scan-freq-btn" data-val="weekly">Weekly</button>
           </div>
           <span id="trend-scan-ts" style="color:var(--text-muted); font-size:11px;"></span>
           <div id="trend-scan-loading" style="display:none;"><span class="spinner"></span> Scanning…</div>
@@ -262,16 +262,16 @@
       <div id="scanner-loading" class="chart-loading" style="display:none;"><span class="spinner"></span> Scanning watchlist…</div>
       <div class="scanner-controls">
         <div class="scanner-controls-left">
-          <button id="btn-scan" class="btn btn-primary" onclick="loadScannerData()">⟳ Scan All</button>
+          <button id="btn-scan" class="btn btn-primary">⟳ Scan All</button>
           <span id="scanner-ts" class="scanner-ts"></span>
         </div>
         <div class="scanner-controls-right">
           <span class="overlay-section-label">Groups</span>
-          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="rsi"   onclick="toggleScanGroup('rsi')">RSI</button>
-          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="kama"  onclick="toggleScanGroup('kama')">KAMA Ratios</button>
-          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="mom"   onclick="toggleScanGroup('mom')">Momentum</button>
-          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="vol"   onclick="toggleScanGroup('vol')">Volatility</button>
-          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="trend" onclick="toggleScanGroup('trend')">Trend</button>
+          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="rsi"  >RSI</button>
+          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="kama" >KAMA Ratios</button>
+          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="mom"  >Momentum</button>
+          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="vol"  >Volatility</button>
+          <button class="ind-pill scan-grp-btn scanner-toggle-on" data-grp="trend">Trend</button>
         </div>
       </div>
       <div class="scanner-table-wrap">
@@ -284,11 +284,11 @@
     <div id="data-manager-area" class="dm-container" style="display:none;">
       <div class="dm-left">
         <div class="dm-panel-header">Ticker Library</div>
-        <div class="dm-search-wrap"><input id="dm-search" type="text" class="dm-search" placeholder="Search tickers…" oninput="dmFilterTickers()" /></div>
+        <div class="dm-search-wrap"><input id="dm-search" type="text" class="dm-search" placeholder="Search tickers…" /></div>
         <div id="dm-categories" class="dm-categories"></div>
         <div class="dm-select-controls">
-          <button class="btn btn-ghost btn-sm" onclick="dmSelectAll()">Select All</button>
-          <button class="btn btn-ghost btn-sm" onclick="dmSelectNone()">Deselect All</button>
+          <button id="btn-dm-select-all"  class="btn btn-ghost btn-sm">Select All</button>
+          <button id="btn-dm-select-none" class="btn btn-ghost btn-sm">Deselect All</button>
           <span id="dm-selected-count" class="dm-sel-count">0 selected</span>
         </div>
       </div>
@@ -307,8 +307,8 @@
           <div class="dm-field dm-field-row"><label class="dm-label dm-label-inline"><input id="dm-add-watchlist" type="checkbox" checked /> Also add to watchlist</label></div>
         </div>
         <div class="dm-actions">
-          <button id="btn-dm-fetch" class="btn btn-primary" onclick="dmStartBatch()">▶ Fetch Selected</button>
-          <button id="btn-dm-abort" class="btn btn-danger" style="display:none;" onclick="dmAbortBatch()">■ Abort</button>
+          <button id="btn-dm-fetch" class="btn btn-primary">▶ Fetch Selected</button>
+          <button id="btn-dm-abort" class="btn btn-danger" style="display:none;">■ Abort</button>
         </div>
         <div id="dm-progress-section" class="dm-progress-section" style="display:none;">
           <div class="dm-progress-header"><span id="dm-progress-label">Starting…</span><span id="dm-progress-pct" class="dm-pct">0%</span></div>
@@ -323,11 +323,11 @@
     <!-- Daily Edge Area -->
     <div id="daily-edge-area" style="display:none; flex:1; flex-direction:column; overflow:hidden;">
       <div class="nl-toolbar">
-        <button class="btn btn-primary" onclick="window.nlRefresh && window.nlRefresh()">⟳ Refresh</button>
+        <button id="btn-nl-refresh" class="btn btn-primary">⟳ Refresh</button>
 
         <div class="nl-toolbar-group">
           <span class="nl-toolbar-label">Picks</span>
-          <select id="nl-n-select" class="nl-select" onchange="window.nlRefresh && window.nlRefresh()">
+          <select id="nl-n-select" class="nl-select">
             <option value="10">Top 10</option>
             <option value="20" selected>Top 20</option>
             <option value="30">Top 30</option>
@@ -337,7 +337,7 @@
 
         <div class="nl-toolbar-group">
           <span class="nl-toolbar-label">Sort by</span>
-          <select id="nl-sort-select" class="nl-select" onchange="window.nlApplyFilters && window.nlApplyFilters()">
+          <select id="nl-sort-select" class="nl-select">
             <option value="score">Score</option>
             <option value="momentum">Momentum (ROC 5D)</option>
             <option value="volume">Volume Surge</option>
@@ -347,14 +347,14 @@
         </div>
 
         <div class="nl-filter-pills">
-          <button class="nl-filter-pill active" data-filter="all"  onclick="window.nlSetFilter('all')">All</button>
-          <button class="nl-filter-pill"        data-filter="bull" onclick="window.nlSetFilter('bull')">Bullish</button>
-          <button class="nl-filter-pill"        data-filter="bear" onclick="window.nlSetFilter('bear')">Bearish</button>
+          <button class="nl-filter-pill active" data-filter="all" >All</button>
+          <button class="nl-filter-pill"        data-filter="bull">Bullish</button>
+          <button class="nl-filter-pill"        data-filter="bear">Bearish</button>
         </div>
 
         <div class="nl-view-toggle">
-          <button class="nl-view-btn active" data-view="grid"  onclick="window.nlSetView('grid')">⊞ Grid</button>
-          <button class="nl-view-btn"        data-view="table" onclick="window.nlSetView('table')">≡ Table</button>
+          <button class="nl-view-btn active" data-view="grid" >⊞ Grid</button>
+          <button class="nl-view-btn"        data-view="table">≡ Table</button>
         </div>
 
         <span class="nl-toolbar-spacer"></span>
@@ -382,11 +382,11 @@
 <div id="toast-container" class="toast-container"></div>
 
 <!-- Bulk Add Modal -->
-<div id="bulk-modal" class="bulk-modal-overlay" style="display:none;" onclick="if(event.target===this)closeBulkModal()">
+<div id="bulk-modal" class="bulk-modal-overlay" style="display:none;">
   <div class="bulk-modal-card" role="dialog" aria-modal="true" aria-labelledby="bulk-modal-title">
     <div class="bulk-modal-header">
       <span id="bulk-modal-title">Bulk Import Tickers</span>
-      <button class="bulk-modal-close" onclick="closeBulkModal()" title="Close">×</button>
+      <button id="btn-bulk-close" class="bulk-modal-close" title="Close">×</button>
     </div>
     <div class="bulk-modal-body">
       <textarea id="bulk-symbols-input" class="bulk-textarea" placeholder="AAPL, TSLA, MSFT&#10;GOOGL&#10;AMZN SPY QQQ" rows="9" spellcheck="false"></textarea>
@@ -397,8 +397,8 @@
       </div>
     </div>
     <div class="bulk-modal-footer">
-      <button class="btn btn-ghost" onclick="closeBulkModal()">Cancel</button>
-      <button id="btn-bulk-submit" class="btn btn-primary" onclick="bulkAddSymbols()">Import Tickers</button>
+      <button id="btn-bulk-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="btn-bulk-submit" class="btn btn-primary">Import Tickers</button>
     </div>
   </div>
 </div>
@@ -409,5 +409,6 @@
 <script src="scripts/data_manager.js"></script>
 <script src="scripts/app.js"></script>
 <script src="scripts/newsletter.js"></script>
+<script src="scripts/init.js"></script>
 </body>
 </html>

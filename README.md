@@ -1,6 +1,6 @@
-# DailyNews — Financial Dashboard + Newsletter Generator
+# DailyNews — Financial Dashboard
 
-A unified Flask web application combining a real-time financial dashboard with an automated market newsletter generator.
+A Flask web application combining a real-time financial dashboard with an automated market newsletter view.
 
 ## Features
 
@@ -14,8 +14,8 @@ A unified Flask web application combining a real-time financial dashboard with a
 | Layer | Tech |
 |---|---|
 | Backend | Python 3.11+, Flask, SQLite (WAL mode) |
-| Data | yfinance (OHLCV), FRED API (macro series) |
-| Analysis | pandas, numpy, scipy, scikit-learn, ta |
+| Data | yfinance (OHLCV) |
+| Analysis | pandas, numpy, scipy, scikit-learn |
 | Frontend | Vanilla JS, TradingView Lightweight Charts v4.1.3, Chart.js v4.4.3 |
 
 ## Setup
@@ -29,7 +29,6 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 # 3. (Optional) Set environment variables
-export FRED_API_KEY=your_fred_key   # for macro series in Daily Edge
 export PORT=8050
 export LOG_LEVEL=INFO
 export DEBUG=false
@@ -52,17 +51,18 @@ yfinance ──► data_fetcher.py ──► finance.db (OHLCV)
                    trend, KNN, ...)       ► /api/newsletter/data
 ```
 
-The Daily Edge tab fetches scored momentum picks from `/api/newsletter/data`. Results are cached for 5 minutes; the "Refresh" button forces a recompute.
+The Daily Edge tab fetches scored momentum picks from `/api/newsletter/data`. Results are cached for 5 minutes; the “Refresh” button forces a recompute.
 
 ## Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `8050` | HTTP port |
+| `HOST` | `127.0.0.1` | Bind address (`0.0.0.0` for Docker) |
 | `DEBUG` | `false` | Flask debug mode (never enable in production) |
 | `LOG_LEVEL` | `INFO` | Python logging level |
-| `FRED_API_KEY` | _(none)_ | FRED API key for macro newsletter series |
-| `DAILY_EDGE_DB` | `daily_edge_cache.db` | Path to newsletter cache DB |
+| `FINANCE_DB` | `finance.db` (next to `app.py`) | Path to OHLCV SQLite database |
+| `CORS_ORIGINS` | `http://localhost:8050` | Comma-separated allowed CORS origins |
 
 ## Docker
 
@@ -70,30 +70,24 @@ The Daily Edge tab fetches scored momentum picks from `/api/newsletter/data`. Re
 docker compose up
 ```
 
-Builds a single container running Flask on port 8050. Mount a volume at `/app/data` to persist SQLite databases.
+Builds a single container running Flask on port 8050. Mount a volume at `/app/data` to persist the SQLite database.
 
 ## Project structure
 
 ```
-app.py                  Flask application and REST API routes
+app.py                  Flask application entry point
+blueprints/             Route groups (symbols, data, indicators, scanner, newsletter)
 newsletter_engine.py    Daily Edge scoring and chart config generation
 database.py             OHLCV SQLite layer (finance.db)
-nl_cache.py             Newsletter cache SQLite layer (daily_edge_cache.db)
 data_fetcher.py         yfinance OHLCV downloader (incremental)
-nl_fetcher.py           yfinance + FRED downloader for newsletter universe
-features.py             Comprehensive feature engineering (15 dimensions)
-story_selector.py       Story ranking and section quota allocation
-newsletter_generator.py HTML newsletter renderer (Jinja2)
-run_newsletter.py       CLI newsletter orchestrator
-universe.py             Full macro/equity universe (~250 series)
-scanner.py              Multi-timeframe scanner
+scanner.py              Multi-timeframe scanner (no external TA lib dependency)
 adaptive_trend.py       Adaptive trend / KAMA regime detection
 backtester.py           Simple KAMA crossover backtester
 knn_model.py            KNN pattern lookalike
 indicators.py           Technical indicator helpers
 stats.py                Return statistics
 ticker_lists.py         Curated ticker library for bulk import
+tests/                  Pytest suite (indicators, newsletter_engine, scanner)
 scripts/                Frontend JavaScript modules
 styles/                 CSS stylesheets
-templates/              Jinja2 HTML templates
 ```

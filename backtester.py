@@ -4,7 +4,6 @@ backtester.py - KAMA Crossover Optimizer
 
 import numpy as np
 import pandas as pd
-import ta
 import database as db
 
 FAST_PERIODS = [5, 8, 10, 15, 20]
@@ -37,9 +36,19 @@ def _compute_trend_score(df: pd.DataFrame) -> pd.Series:
     high  = df["high"]
     low   = df["low"]
 
-    rsi14 = ta.momentum.RSIIndicator(close, window=14).rsi()
-    cci   = ta.trend.CCIIndicator(high, low, close, window=20).cci()
-    macd_hist = ta.trend.MACD(close, window_slow=26, window_fast=12, window_sign=9).macd_diff()
+    delta = close.diff()
+    rsi14 = (100.0 - 100.0 / (1.0 + delta.clip(lower=0).ewm(alpha=1.0/14, adjust=False).mean()
+             / (-delta).clip(lower=0).ewm(alpha=1.0/14, adjust=False).mean().replace(0, np.nan)))
+
+    hlc3  = (high + low + close) / 3.0
+    sma20 = hlc3.rolling(20).mean()
+    mad20 = hlc3.rolling(20).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True)
+    cci   = (hlc3 - sma20) / (0.015 * mad20.replace(0, np.nan))
+
+    ema12     = close.ewm(span=12, adjust=False).mean()
+    ema26     = close.ewm(span=26, adjust=False).mean()
+    macd_line = ema12 - ema26
+    macd_hist = macd_line - macd_line.ewm(span=9, adjust=False).mean()
 
     rsi_score  = np.where(rsi14 > 80, 0, np.where(rsi14 > 50, 1, -1))
     cci_score  = np.where(cci > 0, 1, -1)
